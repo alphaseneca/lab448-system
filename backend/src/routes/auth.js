@@ -1,8 +1,9 @@
 import express from "express";
+import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import db from "../db.js";
-import { JWT_EXPIRES_IN, JWT_SECRET, PERMISSIONS } from "../config.js";
+import { JWT_EXPIRES_IN, JWT_SECRET } from "../config.js";
 import { authenticate } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -38,6 +39,7 @@ router.post("/login", async (req, res) => {
       expiresIn: JWT_EXPIRES_IN,
     });
 
+    const perms = user.role?.permissions || [];
     res.json({
       token,
       user: {
@@ -46,7 +48,11 @@ router.post("/login", async (req, res) => {
         email: user.email,
         roleId: user.roleId,
         roleName: user.role?.name,
-        permissions: user.role?.permissions || [],
+        roleCode: user.role?.code || null,
+        permissions: Array.isArray(perms) ? perms : [],
+        commissionRate: user.role?.code === "TECHNICIAN" ? user.commissionRate : null,
+        technicianLevel: user.technicianLevel,
+        technicianLevelDisplay: user.technicianLevelDisplay,
       },
     });
   } catch (err) {
@@ -63,13 +69,18 @@ router.get("/me", authenticate, async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+    const perms = user.role?.permissions || [];
     res.json({
       id: user.id,
       name: user.name,
       email: user.email,
       roleId: user.roleId,
       roleName: user.role?.name,
-      permissions: user.role?.permissions || [],
+      roleCode: user.role?.code || null,
+      permissions: Array.isArray(perms) ? perms : [],
+      commissionRate: user.role?.code === "TECHNICIAN" ? user.commissionRate : null,
+      technicianLevel: user.technicianLevel,
+      technicianLevelDisplay: user.technicianLevelDisplay,
     });
   } catch (err) {
     console.error("Me error", err);
@@ -88,13 +99,15 @@ router.post("/bootstrap-admin", async (req, res) => {
 
   try {
     let adminRole = await db.Role.findOne({
-      where: { name: "admin" },
+      where: { [Op.or]: [{ code: "ADMIN" }, { name: "admin" }] },
     });
     if (!adminRole) {
       adminRole = await db.Role.create({
-        name: "admin",
-        description: "System administrator",
-        permissions: Object.values(PERMISSIONS),
+        id: "role_admin",
+        code: "ADMIN",
+        name: "HQ Access",
+        description: "Full system access and configuration",
+        permissions: ["*:*"],
       });
     }
 
@@ -114,7 +127,12 @@ router.post("/bootstrap-admin", async (req, res) => {
     res.status(201).json({ id: user.id, email: user.email });
   } catch (err) {
     console.error("Bootstrap admin error", err);
-    res.status(500).json({ message: "Internal server error" });
+    const message = err && (err.message || String(err));
+    res.status(500).json({
+      message: "Internal server error",
+      error: message,
+      ...(process.env.NODE_ENV !== "production" && err.stack && { details: err.stack }),
+    });
   }
 });
 

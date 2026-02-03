@@ -1,0 +1,4 @@
+{
+  "frontdeskCharge": 100,
+  "_comment": "frontdeskCharge (Rs.) is added as a FLAT charge on every repair intake. Change as needed; no DB migration required."
+}

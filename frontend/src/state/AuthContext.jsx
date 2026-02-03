@@ -43,9 +43,24 @@ export const AuthProvider = ({ children }) => {
     delete api.defaults.headers.common.Authorization;
   };
 
+  const isAdmin = () =>
+    user?.roleCode === "ADMIN" ||
+    user?.permissions?.includes("*:*") ||
+    user?.roleName?.toLowerCase() === "admin" ||
+    user?.roleName?.toLowerCase() === "hq access";
+
   const hasPermission = (perm) => {
-    if (!user?.permissions) return false;
+    if (!user) return false;
+    if (isAdmin()) return true;
+    if (!user.permissions) return false;
     return user.permissions.includes(perm);
+  };
+
+  const hasRole = (roleCode) => {
+    if (!user) return false;
+    if (isAdmin()) return true;
+    if (!user.roleCode) return false;
+    return user.roleCode === roleCode;
   };
 
   return (
@@ -57,6 +72,8 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         hasPermission,
+        hasRole,
+        isAdmin,
       }}
     >
       {children}

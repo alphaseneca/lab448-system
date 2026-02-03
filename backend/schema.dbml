@@ -1,0 +1,233 @@
+// Lab448 Repair Shop - Database Schema (DBML)
+// Generated from Sequelize models. Use this to visualize relations and plan refactors.
+// View at https://dbdiagram.io or with VS Code DBML extension.
+
+Project lab448_repair {
+  database_type: 'PostgreSQL'
+  Note: 'Repair shop automation: customers, devices, repairs, billing, inventory, users & roles'
+}
+
+// =============================================================================
+// USERS & ROLES
+// =============================================================================
+
+Table roles {
+  id varchar [pk, note: 'CUID2']
+  code varchar [unique, note: 'e.g. TECHNICIAN, ADMIN']
+  name varchar [not null, note: 'Display name e.g. Repair Army']
+  description text
+  permissions jsonb [not null, default: '[]', note: 'Array of permission keys']
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'User roles with JSONB permissions. code = role identifier.'
+}
+
+Table users {
+  id varchar [pk, note: 'CUID2']
+  email varchar [not null, unique]
+  password_hash varchar [not null]
+  name varchar [not null]
+  is_active boolean [not null, default: true]
+  commission_rate decimal(10,2) [note: 'TECHNICIAN only - staff share when bill locked']
+  technician_level varchar(20) [note: 'JUNIOR|SENIOR|EXPERT|MASTER']
+  technician_level_display varchar(50) [note: 'e.g. Repair Sergeant']
+  role_id varchar [not null, ref: > roles.id]
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Staff/users. commission_rate and technician_level only for TECHNICIAN role.'
+}
+
+// =============================================================================
+// CUSTOMERS & DEVICES
+// =============================================================================
+
+Table customers {
+  id varchar [pk, note: 'CUID2']
+  name varchar [not null]
+  phone varchar
+  phone2 varchar [note: 'Alternate phone']
+  email varchar
+  address text
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Customer master. Devices and repairs link here.'
+}
+
+Table device_categories {
+  id varchar [pk, note: 'CUID2']
+  name varchar [not null]
+  parent_id varchar [ref: > device_categories.id]
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Hierarchical device category (optional). Parent for tree.'
+}
+
+Table devices {
+  id varchar [pk, note: 'CUID2']
+  customer_id varchar [not null, ref: > customers.id]
+  category_id varchar [ref: > device_categories.id]
+  brand varchar
+  model varchar
+  serial_number varchar
+  description text [note: 'Device issue / problem description']
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Device per customer. description = issue reported at intake.'
+}
+
+// =============================================================================
+// REPAIR CATEGORIES (flat rate)
+// =============================================================================
+
+Table repair_categories {
+  id varchar [pk, note: 'CUID2']
+  name varchar [not null]
+  parent_id varchar [ref: > repair_categories.id]
+  flat_rate decimal(10,2) [note: 'Only Level 3 (leaf) should have value']
+  level integer [not null, note: '1=Level1, 2=Level2, 3=Level3']
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Hierarchical repair type. Level 3 flat_rate used at intake.'
+}
+
+// =============================================================================
+// REPAIRS (core)
+// =============================================================================
+
+Table repairs {
+  id varchar [pk, note: 'CUID2']
+  customer_id varchar [not null, ref: > customers.id]
+  device_id varchar [not null, ref: > devices.id]
+  assigned_to_user_id varchar [ref: > users.id]
+  status varchar [not null, default: 'INTAKE', note: 'INTAKE|TO_REPAIR|IN_REPAIR|REPAIRED|UNREPAIRABLE|DELIVERED']
+  qr_token varchar [not null, unique, note: 'LAB+YYMMDD+seq, scannable']
+  intake_notes text
+  repair_category_id varchar [ref: > repair_categories.id]
+  flat_charge_amount decimal(10,2) [not null, default: 0]
+  total_charges decimal(10,2) [not null, default: 0]
+  staff_share_amount decimal(10,2) [not null, default: 0]
+  shop_share_amount decimal(10,2) [not null, default: 0]
+  is_locked boolean [not null, default: false, note: 'Bill locked when fully paid']
+  intake_at timestamp [not null]
+  to_repair_at timestamp
+  in_repair_at timestamp
+  completed_at timestamp
+  delivered_at timestamp
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Core repair record. Status lifecycle enforced in API.'
+}
+
+// =============================================================================
+// QR TOKEN SEQUENCE (no relations)
+// =============================================================================
+
+Table qr_daily_sequences {
+  date_key varchar(6) [pk, note: 'YYMMDD']
+  last_value integer [not null, default: 0, note: 'Last sequence for this day']
+
+  Note: 'One row per day for LAB+YYMMDD+4digit token generation. No timestamps.'
+}
+
+// =============================================================================
+// INVENTORY
+// =============================================================================
+
+Table inventories {
+  id varchar [pk, note: 'CUID2']
+  name varchar [not null]
+  sku varchar [unique, note: 'Lookup by id or sku in repair workspace']
+  quantity integer [not null, default: 0]
+  unit_price decimal(10,2) [not null, default: 0]
+  is_active boolean [not null, default: true]
+  created_at timestamp
+  updated_at timestamp
+
+  Note: 'Stock items. Use inventory/lookup?key=id_or_sku for repair add.'
+}
+
+Table inventory_usages {
+  id varchar [pk, note: 'CUID2']
+  repair_id varchar [not null, ref: > repairs.id]
+  inventory_id varchar [not null, ref: > inventories.id]
+  quantity_used integer [not null]
+  unit_price_at_use decimal(10,2) [not null]
+  created_by_user_id varchar [not null, ref: > users.id]
+  created_at timestamp
+
+  Note: 'Usage of inventory on a repair. Creates a repair_charge (INVENTORY type). No updated_at.'
+}
+
+// =============================================================================
+// BILLING: CHARGES & PAYMENTS
+// =============================================================================
+
+Table repair_charges {
+  id varchar [pk, note: 'CUID2']
+  repair_id varchar [not null, ref: > repairs.id]
+  type varchar [not null, note: 'INVENTORY|FLAT|DISCOUNT|OTHER']
+  description varchar [not null]
+  amount decimal(10,2) [not null]
+  source_inventory_usage_id varchar [ref: > inventory_usages.id, note: 'Set when type=INVENTORY']
+  created_by_user_id varchar [not null, ref: > users.id]
+  created_at timestamp
+
+  Note: 'Line items on a repair bill. Sum = repair.total_charges. No updated_at.'
+}
+
+Table payments {
+  id varchar [pk, note: 'CUID2']
+  repair_id varchar [not null, ref: > repairs.id]
+  amount decimal(10,2) [not null]
+  method varchar [not null, note: 'CASH|CARD|BANK_TRANSFER|OTHER']
+  received_by_user_id varchar [not null, ref: > users.id]
+  received_at timestamp [not null]
+  created_at timestamp
+
+  Note: 'Payment against a repair. When sum(payments) = total_charges, bill locks. No updated_at.'
+}
+
+// =============================================================================
+// AUDIT
+// =============================================================================
+
+Table audit_logs {
+  id varchar [pk, note: 'CUID2']
+  user_id varchar [ref: > users.id]
+  repair_id varchar [ref: > repairs.id]
+  entity_type varchar [not null]
+  entity_id varchar [not null]
+  action varchar [not null]
+  metadata jsonb
+  created_at timestamp
+
+  Note: 'Audit trail for key actions. No updated_at.'
+}
+
+// =============================================================================
+// RELATIONSHIP SUMMARY (explicit refs for clarity)
+// =============================================================================
+// roles 1 --< users
+// customers 1 --< devices
+// customers 1 --< repairs (repairs also link device)
+// device_categories 1 --< devices (self-ref parent/children)
+// devices 1 --< repairs
+// users 1 --< repairs (assigned_to)
+// repair_categories 1 --< repairs (self-ref parent/children)
+// repairs 1 --< inventory_usages
+// repairs 1 --< repair_charges
+// repairs 1 --< payments
+// repairs 1 --< audit_logs
+// inventories 1 --< inventory_usages
+// users 1 --< inventory_usages (created_by)
+// users 1 --< repair_charges (created_by)
+// users 1 --< payments (received_by)
+// users 1 --< audit_logs
+// inventory_usages 1 --< repair_charges (source when type=INVENTORY)

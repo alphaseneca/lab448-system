@@ -22,6 +22,8 @@ import Customer from "./Customer.js";
 import DeviceCategory from "./DeviceCategory.js";
 import Device from "./Device.js";
 import Repair from "./Repair.js";
+import RepairCategory from "./RepairCategory.js";
+import QrDailySequence from "./QrDailySequence.js";
 import Inventory from "./Inventory.js";
 import InventoryUsage from "./InventoryUsage.js";
 import RepairCharge from "./RepairCharge.js";
@@ -36,6 +38,8 @@ const models = {
   DeviceCategory: DeviceCategory(sequelize),
   Device: Device(sequelize),
   Repair: Repair(sequelize),
+  RepairCategory: RepairCategory(sequelize),
+  QrDailySequence: QrDailySequence(sequelize),
   Inventory: Inventory(sequelize),
   InventoryUsage: InventoryUsage(sequelize),
   RepairCharge: RepairCharge(sequelize),

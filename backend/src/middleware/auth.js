@@ -20,16 +20,21 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: "User not found or inactive" });
     }
 
+    const permissions = Array.isArray(user.role?.permissions)
+      ? user.role.permissions
+      : user.role?.permissions?.permissions || [];
     req.user = {
       id: user.id,
       name: user.name,
       email: user.email,
       roleId: user.roleId,
       roleName: user.role?.name,
-      permissions: Array.isArray(user.role?.permissions)
-        ? user.role.permissions
-        : user.role?.permissions?.permissions || [],
-      commissionRate: user.commissionRate,
+      roleCode: user.role?.code || null,
+      permissions,
+      commissionRate:
+        user.role?.code === "TECHNICIAN" ? user.commissionRate : null,
+      technicianLevel: user.technicianLevel,
+      technicianLevelDisplay: user.technicianLevelDisplay,
     };
 
     next();
@@ -44,10 +49,11 @@ export const authorize = (requiredPermissions = []) => {
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
+    const userPerms = req.user.permissions || [];
+    if (userPerms.includes("*:*")) return next();
     if (!requiredPermissions.length) {
       return next();
     }
-    const userPerms = req.user.permissions || [];
     const hasAll = requiredPermissions.every((p) => userPerms.includes(p));
     if (!hasAll) {
       return res.status(403).json({ message: "Forbidden" });

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../utils/apiClient.js";
 
 const StatCard = ({ label, value, icon, gradient }) => (
@@ -118,18 +119,18 @@ const DashboardPage = () => {
           Quick Actions
         </h3>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <a href="/intake" style={{ textDecoration: "none" }}>
-            <button className="btn btn-primary">📥 New Intake</button>
-          </a>
-          <a href="/qr-scan" style={{ textDecoration: "none" }}>
-            <button className="btn btn-ghost">📷 Scan QR</button>
-          </a>
-          <a href="/queue" style={{ textDecoration: "none" }}>
-            <button className="btn btn-ghost">🔧 View Queue</button>
-          </a>
-          <a href="/inventory" style={{ textDecoration: "none" }}>
-            <button className="btn btn-ghost">📦 Manage Inventory</button>
-          </a>
+          <Link to="/intake" style={{ textDecoration: "none" }}>
+            <button className="btn btn-primary" type="button">📥 New Intake</button>
+          </Link>
+          <Link to="/qr-scan" style={{ textDecoration: "none" }}>
+            <button className="btn btn-ghost" type="button">📷 Scan QR</button>
+          </Link>
+          <Link to="/queue" style={{ textDecoration: "none" }}>
+            <button className="btn btn-ghost" type="button">🔧 View Queue</button>
+          </Link>
+          <Link to="/inventory" style={{ textDecoration: "none" }}>
+            <button className="btn btn-ghost" type="button">📦 Manage Inventory</button>
+          </Link>
         </div>
       </div>
     </div>

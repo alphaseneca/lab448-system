@@ -4,6 +4,18 @@ export const api = axios.create({
   baseURL: "/api",
 });
 
+// Attach token from localStorage on every request so auth works even before
+// AuthContext's useEffect runs (e.g. after full-page navigation or fast child mount).
+api.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (e) {}
+  return config;
+});
+
 api.interceptors.response.use(
   (resp) => resp,
   (error) => {

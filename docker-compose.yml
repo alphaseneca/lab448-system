@@ -1,0 +1,36 @@
+# Lab448 Repair Shop - Full stack (no nginx: backend serves frontend)
+# Single entrypoint: backend on port 4000 (API + static frontend)
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lab448}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lab448_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-lab448_repair}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lab448} -d ${POSTGRES_DB:-lab448_repair}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:${HTTP_PORT:-8080}:4000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lab448}:${POSTGRES_PASSWORD:-lab448_secret}@postgres:5432/${POSTGRES_DB:-lab448_repair}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret}
+      PORT: "4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

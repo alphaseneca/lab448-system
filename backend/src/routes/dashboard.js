@@ -1,18 +1,443 @@
 import express from "express";
 import { Op } from "sequelize";
 import db, { sequelize } from "../db.js";
-import { authenticate, authorize } from "../middleware/auth.js";
-import { PERMISSIONS } from "../config.js";
+import { authenticate } from "../middleware/auth.js";
+import { checkPermission, requireRole } from "../middleware/checkPermission.js";
+import { REPAIR_STATUS } from "../config.js";
 
 const router = express.Router();
+const LOW_STOCK_THRESHOLD = 5;
 
 router.use(authenticate);
 
+
+// Helper: technician or admin
+const techOrAdmin = requireRole(["TECHNICIAN", "ADMIN"]);
+const fdOrAdmin = requireRole(["FRONT_DESK", "ADMIN"]);
+const logOrAdmin = requireRole(["LOGISTICS", "ADMIN"]);
+const finOrAdmin = requireRole(["FINANCE", "ADMIN"]);
+const mgrOrAdmin = requireRole(["MANAGER", "ADMIN"]);
+const adminOnly = requireRole(["ADMIN"]);
+
+// GET /api/dashboard/technician
+router.get("/technician", techOrAdmin, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const myRepairs = await db.Repair.findAll({
+      where: { assignedToUserId: userId },
+      include: [
+        { model: db.Customer, as: "customer", attributes: ["id", "name", "phone"] },
+        { model: db.Device, as: "device", attributes: ["id", "brand", "model", "description"] },
+      ],
+      order: [["updatedAt", "DESC"]],
+    });
+
+    const inProgress = myRepairs.filter((r) =>
+      ["TO_REPAIR", "IN_REPAIR"].includes(r.status)
+    );
+    const completedThisMonth = await db.Repair.count({
+      where: {
+        assignedToUserId: userId,
+        status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE", "DELIVERED"] },
+        completedAt: { [Op.gte]: monthStart },
+      },
+    });
+
+    const completedRepairs = await db.Repair.findAll({
+      where: {
+        assignedToUserId: userId,
+        status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE", "DELIVERED"] },
+        completedAt: { [Op.gte]: monthStart },
+        isLocked: true,
+      },
+      attributes: ["id", "staffShareAmount", "completedAt", "inRepairAt"],
+    });
+
+    const totalEarnings = completedRepairs.reduce(
+      (sum, r) => sum + Number(r.staffShareAmount || 0),
+      0
+    );
+
+    let avgCompletionHours = 0;
+    const withTimes = completedRepairs.filter(
+      (r) => r.inRepairAt && r.completedAt
+    );
+    if (withTimes.length > 0) {
+      const totalHours = withTimes.reduce((sum, r) => {
+        const h = (new Date(r.completedAt) - new Date(r.inRepairAt)) / (1000 * 60 * 60);
+        return sum + h;
+      }, 0);
+      avgCompletionHours = Math.round(totalHours / withTimes.length * 10) / 10;
+    }
+
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const trendData = await db.Repair.findAll({
+      where: {
+        assignedToUserId: userId,
+        completedAt: { [Op.gte]: sixMonthsAgo },
+        status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE", "DELIVERED"] },
+      },
+      attributes: ["completedAt"],
+      raw: true,
+    });
+
+    const byMonth = {};
+    trendData.forEach((r) => {
+      const d = new Date(r.completedAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      byMonth[key] = (byMonth[key] || 0) + 1;
+    });
+    const performanceTrend = Object.entries(byMonth)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, count]) => ({ month, repairsCompleted: count }));
+
+    res.json({
+      current_month_stats: {
+        total_repairs_completed: completedThisMonth,
+        total_earnings: Number(totalEarnings.toFixed(2)),
+        average_completion_time_hours: avgCompletionHours,
+        repairs_in_progress: inProgress.length,
+      },
+      my_active_repairs: inProgress.slice(0, 20),
+      performance_trend: performanceTrend,
+    });
+  } catch (err) {
+    console.error("Technician dashboard error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /api/dashboard/front-desk
+router.get("/front-desk", fdOrAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [newIntakesToday, allRepairs, monthPayments, recentRepairs, repairsWithPayments] =
+      await Promise.all([
+        db.Repair.count({
+          where: { intakeAt: { [Op.gte]: todayStart } },
+        }),
+        db.Repair.findAll({
+          where: { status: { [Op.ne]: "DELIVERED" } },
+          include: [
+            { model: db.Customer, as: "customer", attributes: ["id", "name", "phone"] },
+            { model: db.Device, as: "device", attributes: ["id", "brand", "model"] },
+            { model: db.Payment, as: "payments" },
+          ],
+        }),
+        db.Payment.sum("amount", {
+          where: { receivedAt: { [Op.gte]: monthStart } },
+        }),
+        db.Repair.findAll({
+          include: [
+            { model: db.Customer, as: "customer", attributes: ["id", "name", "phone"] },
+            { model: db.Device, as: "device", attributes: ["id", "brand", "model"] },
+          ],
+          order: [["createdAt", "DESC"]],
+          limit: 20,
+        }),
+        db.Repair.findAll({
+          include: [
+            { model: db.Customer, as: "customer", attributes: ["id", "name", "phone"] },
+            { model: db.Device, as: "device", attributes: ["id", "brand", "model"] },
+            { model: db.Payment, as: "payments" },
+          ],
+        }),
+      ]);
+
+    const pendingDeliveries = allRepairs.filter((r) =>
+      ["REPAIRED", "UNREPAIRABLE"].includes(r.status)
+    );
+    const totalCustomersServed = new Set(
+      allRepairs.map((r) => r.customerId)
+    ).size;
+
+    const pendingPayments = repairsWithPayments
+      .filter((r) => !r.isLocked)
+      .map((r) => {
+        const paid = r.payments.reduce((s, p) => s + Number(p.amount), 0);
+        const due = Number(r.totalCharges) - paid;
+        return { ...r.toJSON(), paid, due };
+      })
+      .filter((r) => r.due > 0)
+      .sort((a, b) => b.due - a.due)
+      .slice(0, 20);
+
+    res.json({
+      today_stats: {
+        new_intakes: newIntakesToday,
+        pending_deliveries: pendingDeliveries.length,
+        total_customers_served: totalCustomersServed,
+      },
+      current_month_stats: {
+        total_orders: allRepairs.length,
+        revenue_collected: Number(monthPayments || 0),
+      },
+      recent_repairs: recentRepairs,
+      pending_payments: pendingPayments,
+    });
+  } catch (err) {
+    console.error("Front-desk dashboard error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /api/dashboard/logistics
+router.get("/logistics", logOrAdmin, async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [items, recentUsages, usageCounts] = await Promise.all([
+      db.Inventory.findAll({
+        where: { isActive: true },
+        order: [["name", "ASC"]],
+      }),
+      db.InventoryUsage.findAll({
+        where: { createdAt: { [Op.gte]: thirtyDaysAgo } },
+        include: [
+          { model: db.Inventory, as: "inventory" },
+          { model: db.Repair, as: "repair", include: [{ model: db.Customer, as: "customer", attributes: ["name"] }] },
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: 30,
+      }),
+      db.InventoryUsage.findAll({
+        where: { createdAt: { [Op.gte]: thirtyDaysAgo } },
+        attributes: ["inventoryId"],
+        raw: true,
+      }),
+    ]);
+
+    const usageByItem = {};
+    usageCounts.forEach((u) => {
+      usageByItem[u.inventoryId] = (usageByItem[u.inventoryId] || 0) + 1;
+    });
+    const invMap = new Map(items.map((i) => [i.id, i]));
+    const mostUsed = Object.entries(usageByItem)
+      .map(([id, count]) => ({ inventory: invMap.get(id), count }))
+      .filter((x) => x.inventory)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map((x) => ({ ...x.inventory.toJSON(), usage_count: x.count }));
+
+    const totalValue = items.reduce(
+      (s, i) => s + Number(i.quantity) * Number(i.unitPrice),
+      0
+    );
+    const lowStockItems = items.filter((i) => i.quantity < LOW_STOCK_THRESHOLD);
+
+    res.json({
+      inventory_overview: {
+        low_stock_items: lowStockItems,
+        total_items: items.length,
+        total_value: Number(totalValue.toFixed(2)),
+      },
+      recent_usages: recentUsages,
+      most_used_items: mostUsed,
+    });
+  } catch (err) {
+    console.error("Logistics dashboard error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /api/dashboard/finance
+router.get("/finance", finOrAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [todayPayments, monthPayments, allPayments, repairsWithPayments] =
+      await Promise.all([
+        db.Payment.sum("amount", {
+          where: { receivedAt: { [Op.gte]: todayStart } },
+        }),
+        db.Payment.findAll({
+          where: { receivedAt: { [Op.gte]: monthStart } },
+        }),
+        db.Payment.findAll({
+          include: [
+            { model: db.Repair, as: "repair", include: [{ model: db.Customer, as: "customer", attributes: ["name"] }] },
+          ],
+          order: [["receivedAt", "DESC"]],
+          limit: 50,
+        }),
+        db.Repair.findAll({
+          include: [
+            { model: db.Customer, as: "customer", attributes: ["id", "name", "phone"] },
+            { model: db.Device, as: "device", attributes: ["id", "brand", "model"] },
+            { model: db.Payment, as: "payments" },
+          ],
+        }),
+      ]);
+
+    const methodBreakdown = { CASH: 0, CARD: 0, BANK_TRANSFER: 0, OTHER: 0 };
+    monthPayments.forEach((p) => {
+      methodBreakdown[p.method] = (methodBreakdown[p.method] || 0) + Number(p.amount);
+    });
+
+    const pendingBills = repairsWithPayments
+      .filter((r) => !r.isLocked)
+      .map((r) => {
+        const paid = r.payments.reduce((s, p) => s + Number(p.amount), 0);
+        const due = Number(r.totalCharges) - paid;
+        return { ...r.toJSON(), paid, due };
+      })
+      .filter((r) => r.due > 0);
+
+    const outstandingPayments = pendingBills.reduce((s, r) => s + r.due, 0);
+    const totalRevenue = (monthPayments || []).reduce(
+      (s, p) => s + Number(p.amount),
+      0
+    );
+
+    res.json({
+      today_collections: Number(todayPayments || 0),
+      current_month: {
+        total_revenue: totalRevenue,
+        outstanding_payments: Number(outstandingPayments.toFixed(2)),
+        payment_method_breakdown: methodBreakdown,
+      },
+      recent_payments: allPayments,
+      pending_bills: pendingBills.slice(0, 30),
+    });
+  } catch (err) {
+    console.error("Finance dashboard error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /api/dashboard/manager
+router.get("/manager", mgrOrAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    const [repairs, technicians, monthCompleted] = await Promise.all([
+      db.Repair.findAll({
+        where: { status: { [Op.notIn]: ["DELIVERED"] } },
+        include: [
+          { model: db.User, as: "assignedTo", attributes: ["id", "name"] },
+          { model: db.Customer, as: "customer", attributes: ["name"] },
+        ],
+      }),
+      db.User.findAll({
+        include: [
+          {
+            model: db.Role,
+            as: "role",
+            where: { code: "TECHNICIAN" },
+            required: true,
+          },
+        ],
+        attributes: ["id", "name"],
+      }),
+      db.Repair.count({
+        where: {
+          status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE", "DELIVERED"] },
+          completedAt: {
+            [Op.gte]: new Date(now.getFullYear(), now.getMonth(), 1),
+          },
+        },
+      }),
+    ]);
+
+    const statusDistribution = {};
+    Object.values(REPAIR_STATUS).forEach((s) => (statusDistribution[s] = 0));
+    repairs.forEach((r) => {
+      statusDistribution[r.status] = (statusDistribution[r.status] || 0) + 1;
+    });
+
+    const staffUtilization = technicians.map((t) => {
+      const assigned = repairs.filter((r) => r.assignedToUserId === t.id);
+      const inProgress = assigned.filter((r) =>
+        ["TO_REPAIR", "IN_REPAIR"].includes(r.status)
+      );
+      return {
+        technicianId: t.id,
+        technicianName: t.name,
+        assignedCount: assigned.length,
+        inProgressCount: inProgress.length,
+      };
+    });
+
+    const bottlenecks = repairs.filter((r) => {
+      const updated = r.updatedAt || r.createdAt;
+      return new Date(updated) < fortyEightHoursAgo && !["INTAKE"].includes(r.status);
+    });
+
+    res.json({
+      operations_overview: {
+        active_repairs: repairs.length,
+        staff_utilization: staffUtilization,
+        status_distribution: statusDistribution,
+      },
+      performance_metrics: {
+        month_completed: monthCompleted,
+      },
+      bottlenecks: bottlenecks.slice(0, 20),
+    });
+  } catch (err) {
+    console.error("Manager dashboard error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /api/dashboard/admin
+router.get("/admin", adminOnly, async (req, res) => {
+  try {
+    const [users, roles, repairCount, paymentSum] = await Promise.all([
+      db.User.findAll({
+        where: { isActive: true },
+        include: [{ model: db.Role, as: "role" }],
+      }),
+      db.Role.findAll({ order: [["code", "ASC"]] }),
+      db.Repair.count(),
+      db.Payment.sum("amount"),
+    ]);
+
+    const rolesDistribution = {};
+    users.forEach((u) => {
+      const code = u.role?.code || "unknown";
+      rolesDistribution[code] = (rolesDistribution[code] || 0) + 1;
+    });
+
+    res.json({
+      system_overview: {
+        total_repairs: repairCount,
+        total_revenue: Number(paymentSum || 0),
+        active_users: users.length,
+      },
+      user_management_summary: {
+        active_users: users.length,
+        roles_distribution: rolesDistribution,
+      },
+      configuration_status: {
+        roles_configured: roles.length,
+      },
+    });
+  } catch (err) {
+    console.error("Admin dashboard error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Legacy summary (keep for backward compatibility)
 router.get(
   "/summary",
-  authorize([PERMISSIONS.VIEW_DASHBOARD]),
+  checkPermission(["view:dashboard", "*:*"]),
   async (req, res) => {
     try {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const [
         totalRepairs,
         openRepairs,
@@ -30,9 +455,7 @@ router.get(
         db.Repair.sum("totalCharges"),
         db.Payment.sum("amount", {
           where: {
-            receivedAt: {
-              [Op.gte]: new Date(new Date().setHours(0, 0, 0, 0)),
-            },
+            receivedAt: { [Op.gte]: todayStart },
           },
         }),
       ]);
@@ -51,4 +474,3 @@ router.get(
 );
 
 export default router;
-

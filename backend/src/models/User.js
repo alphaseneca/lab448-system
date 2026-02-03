@@ -30,8 +30,16 @@ export default (sequelize) => {
       },
       commissionRate: {
         type: DataTypes.DECIMAL(10, 2),
-        allowNull: false,
-        defaultValue: 0.2,
+        allowNull: true,
+        defaultValue: 0,
+      },
+      technicianLevel: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      technicianLevelDisplay: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
       },
       roleId: {
         type: DataTypes.STRING,

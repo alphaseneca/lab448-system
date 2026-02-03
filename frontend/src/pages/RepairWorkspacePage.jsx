@@ -1,38 +1,77 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import { api } from "../utils/apiClient.js";
 import { REPAIR_STATUS } from "../constants/statuses.js";
 import { useAuth } from "../state/AuthContext.jsx";
 import { PERMISSIONS } from "../constants/permissions.js";
+
+const PrintIcon = ({ size = 20, style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <polyline points="6 9 6 2 18 2 18 9" />
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+    <rect x="6" y="14" width="12" height="8" />
+  </svg>
+);
 
 const RepairWorkspacePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const [repair, setRepair] = useState(null);
-  const [inventory, setInventory] = useState([]);
-  const [inventorySelection, setInventorySelection] = useState({
-    inventoryId: "",
-    quantity: 1,
-  });
+  const [itemKey, setItemKey] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [lookupItem, setLookupItem] = useState(null);
+  const [lookupError, setLookupError] = useState("");
   const [statusError, setStatusError] = useState("");
   const [invError, setInvError] = useState("");
+  const qrPrintRef = useRef(null);
+
+  const printQrContent = (ref) => {
+    if (!ref?.current) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(
+      `<!DOCTYPE html><html><head><title>QR Code</title><style>body{font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;background:#fff;}.token{font-family:monospace;margin-top:12px;font-size:14px;color:#333;}</style></head><body>${ref.current.innerHTML}</body></html>`
+    );
+    win.document.close();
+    win.onload = () => {
+      win.print();
+      win.close();
+    };
+  };
 
   const load = async () => {
     const res = await api.get(`/repairs/${id}`);
     setRepair(res.data);
   };
 
-  const loadInventory = async () => {
-    if (!hasPermission(PERMISSIONS.MANAGE_INVENTORY)) return;
-    const res = await api.get("/inventory");
-    setInventory(res.data.filter((i) => i.isActive));
+  useEffect(() => {
+    load();
+  }, [id]);
+
+  const doLookup = async () => {
+    const key = (itemKey || "").toString().trim();
+    if (!key) {
+      setLookupItem(null);
+      setLookupError("");
+      return;
+    }
+    setLookupError("");
+    setLookupItem(null);
+    try {
+      const res = await api.get("/inventory/lookup", { params: { key } });
+      setLookupItem(res.data);
+    } catch {
+      setLookupItem(null);
+      setLookupError("Item not found");
+    }
   };
 
   useEffect(() => {
-    load();
-    loadInventory();
-  }, [id]);
+    const t = setTimeout(doLookup, 400);
+    return () => clearTimeout(t);
+  }, [itemKey]);
 
   const transitionTo = async (newStatus) => {
     setStatusError("");
@@ -46,219 +85,224 @@ const RepairWorkspacePage = () => {
 
   const addInventoryUsage = async () => {
     setInvError("");
+    const key = (itemKey || "").toString().trim();
+    if (!key) {
+      setInvError("Enter item ID or SKU");
+      return;
+    }
     try {
       await api.post(`/repairs/${id}/use-inventory`, {
-        inventoryId: inventorySelection.inventoryId,
-        quantity: Number(inventorySelection.quantity),
+        itemKey: key,
+        quantity: Number(quantity) || 1,
       });
-      await Promise.all([load(), loadInventory()]);
+      setItemKey("");
+      setQuantity(1);
+      setLookupItem(null);
+      setLookupError("");
+      await load();
     } catch (err) {
       setInvError(err.response?.data?.message || "Failed to use inventory");
     }
   };
 
   if (!repair) {
-    return <div className="text-slate-300">Loading repair...</div>;
+    return (
+      <div className="content">
+        <p className="muted">Loading repair...</p>
+      </div>
+    );
   }
 
   const nextActions = [];
   if (repair.status === REPAIR_STATUS.IN_REPAIR) {
-    nextActions.push({
-      label: "Mark as repaired",
-      status: REPAIR_STATUS.REPAIRED,
-    });
-    nextActions.push({
-      label: "Mark as unrepairable",
-      status: REPAIR_STATUS.UNREPAIRABLE,
-    });
-  } else if (
-    repair.status === REPAIR_STATUS.REPAIRED ||
-    repair.status === REPAIR_STATUS.UNREPAIRABLE
-  ) {
-    nextActions.push({
-      label: "Mark as delivered",
-      status: REPAIR_STATUS.DELIVERED,
-    });
+    nextActions.push({ label: "Mark as repaired", status: REPAIR_STATUS.REPAIRED });
+    nextActions.push({ label: "Mark as unrepairable", status: REPAIR_STATUS.UNREPAIRABLE });
+  } else if (repair.status === REPAIR_STATUS.REPAIRED || repair.status === REPAIR_STATUS.UNREPAIRABLE) {
+    nextActions.push({ label: "Mark as delivered", status: REPAIR_STATUS.DELIVERED });
   }
 
+  const deviceIssue = repair.device?.description?.trim() || "—";
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="content">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "8px" }}>
         <div>
-          <h2 className="text-xl font-semibold text-white">
-            Repair workspace
+          <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
+            🔧 Repair dashboard
           </h2>
-          <p className="text-sm text-slate-400">
-            {repair.customer.name} · {repair.device.brand} {repair.device.model}
+          <p className="muted small" style={{ marginTop: "4px" }}>
+            {repair.customer?.name} · {repair.device?.brand} {repair.device?.model}
           </p>
         </div>
         <button
+          type="button"
           onClick={() => navigate(`/repairs/${id}/billing`)}
-          className="inline-flex items-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-sm font-medium text-white px-4 py-2"
+          className="btn btn-primary"
+          style={{ padding: "10px 20px", fontSize: "14px", fontWeight: 600 }}
         >
-          Billing &amp; payment
+          💳 Billing & payment
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="space-y-4 lg:col-span-1">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-slate-200">
-              Customer
-            </h3>
-            <div className="text-sm text-slate-200">
-              {repair.customer.name}
-            </div>
-            <div className="text-xs text-slate-400">
-              {repair.customer.phone}
-              {repair.customer.email && ` · ${repair.customer.email}`}
-            </div>
-            <div className="mt-3 text-xs text-slate-400">
-              QR token:
-              <span className="ml-2 font-mono bg-slate-950 border border-slate-800 rounded px-2 py-1">
-                {repair.qrToken}
-              </span>
-            </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
+        <div className="card" style={{ padding: "18px" }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 600, color: "var(--muted)" }}>
+            👤 Customer
+          </h3>
+          <div style={{ fontSize: "15px", fontWeight: 500 }}>{repair.customer?.name}</div>
+          <div className="small muted" style={{ marginTop: "4px" }}>
+            {repair.customer?.phone}
+            {repair.customer?.email ? ` · ${repair.customer.email}` : ""}
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-slate-200">
-              Device
-            </h3>
-            <div className="text-sm text-slate-200">
-              {repair.device.brand} {repair.device.model}
-            </div>
-            <div className="text-xs text-slate-400">
-              Serial: {repair.device.serialNumber || "—"}
-            </div>
-            <div className="mt-2 text-xs text-slate-300">
-              {repair.device.description}
-            </div>
+          <div className="small muted" style={{ marginTop: "10px" }}>
+            QR: <span style={{ fontFamily: "monospace", color: "var(--text)" }}>{repair.qrToken}</span>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-slate-200">Status</h3>
-            <div className="inline-flex items-center rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-100">
-              {repair.status.replace("_", " ")}
+          <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ background: "#fff", padding: "6px", borderRadius: "8px", display: "inline-block" }}>
+              <QRCodeSVG value={repair.qrToken} size={100} level="M" />
             </div>
-            {statusError && (
-              <div className="text-xs text-red-400 bg-red-950/40 border border-red-800 rounded-md px-3 py-2">
-                {statusError}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {nextActions.map((a) => (
-                <button
-                  key={a.status}
-                  onClick={() => transitionTo(a.status)}
-                  className="inline-flex items-center rounded-md bg-sky-600 hover:bg-sky-500 text-xs font-medium text-white px-3 py-1.5"
-                >
-                  {a.label}
-                </button>
-              ))}
+            <button
+              type="button"
+              onClick={() => printQrContent(qrPrintRef)}
+              title="Print QR"
+              className="btn btn-ghost"
+              style={{ padding: "6px" }}
+            >
+              <PrintIcon size={18} />
+            </button>
+          </div>
+          <div ref={qrPrintRef} style={{ display: "none" }}>
+            <div style={{ background: "#fff", padding: "8px", display: "inline-block" }}>
+              <QRCodeSVG value={repair.qrToken} size={140} level="M" />
+            </div>
+            <span className="small" style={{ display: "block", marginTop: "8px", fontFamily: "monospace" }}>{repair.qrToken}</span>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: "18px" }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 600, color: "var(--muted)" }}>
+            📱 Device
+          </h3>
+          <div style={{ fontSize: "15px", fontWeight: 500 }}>
+            {repair.device?.brand} {repair.device?.model}
+          </div>
+          <div className="small muted" style={{ marginTop: "4px" }}>
+            Serial: {repair.device?.serialNumber || "—"}
+          </div>
+          <div style={{ marginTop: "12px", padding: "12px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="small muted" style={{ marginBottom: "4px" }}>Issue</div>
+            <div style={{ fontSize: "14px", color: "var(--text)", whiteSpace: "pre-wrap" }}>
+              {deviceIssue}
             </div>
           </div>
         </div>
 
-        <div className="space-y-4 lg:col-span-2">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-200 mb-2">
-              Inventory usage
-            </h3>
-            {hasPermission(PERMISSIONS.USE_INVENTORY) && (
-              <div className="flex flex-wrap items-end gap-3 mb-4">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Item
-                  </label>
-                  <select
-                    className="w-full rounded-md bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
-                    value={inventorySelection.inventoryId}
-                    onChange={(e) =>
-                      setInventorySelection((s) => ({
-                        ...s,
-                        inventoryId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Select item</option>
-                    {inventory.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name} · stock {i.quantity} · ₹
-                        {Number(i.unitPrice).toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Qty
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="w-20 rounded-md bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
-                    value={inventorySelection.quantity}
-                    onChange={(e) =>
-                      setInventorySelection((s) => ({
-                        ...s,
-                        quantity: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <button
-                  onClick={addInventoryUsage}
-                  className="inline-flex items-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white px-3 py-2"
-                >
-                  Use inventory
-                </button>
-              </div>
-            )}
-            {invError && (
-              <div className="mb-3 text-xs text-red-400 bg-red-950/40 border border-red-800 rounded-md px-3 py-2">
-                {invError}
-              </div>
-            )}
-            <table className="w-full text-xs">
-              <thead className="text-slate-400 border-b border-slate-800">
-                <tr>
-                  <th className="py-1 text-left font-medium">When</th>
-                  <th className="py-1 text-left font-medium">Item</th>
-                  <th className="py-1 text-left font-medium">Qty</th>
-                  <th className="py-1 text-right font-medium">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {repair.inventoryUsage.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-b border-slate-800/80 text-slate-200"
-                  >
-                    <td className="py-1">
-                      {new Date(u.createdAt).toLocaleString()}
-                    </td>
-                    <td className="py-1">{u.inventory.name}</td>
-                    <td className="py-1">{u.quantityUsed}</td>
-                    <td className="py-1 text-right">
-                      ₹
-                      {(
-                        Number(u.unitPriceAtUse) * u.quantityUsed
-                      ).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-                {repair.inventoryUsage.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="py-4 text-center text-slate-400"
-                    >
-                      No inventory used yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <div className="card" style={{ padding: "18px" }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 600, color: "var(--muted)" }}>
+            Status
+          </h3>
+          <div style={{ display: "inline-flex", alignItems: "center", padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", fontSize: "13px", fontWeight: 500 }}>
+            {repair.status.replace("_", " ")}
           </div>
+          {statusError && (
+            <div className="small" style={{ color: "#f87171", marginTop: "8px" }}>{statusError}</div>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+            {nextActions.map((a) => (
+              <button
+                key={a.status}
+                type="button"
+                onClick={() => transitionTo(a.status)}
+                className="btn btn-primary"
+                style={{ padding: "8px 14px", fontSize: "13px" }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: "18px" }}>
+        <h3 style={{ margin: "0 0 14px", fontSize: "16px", fontWeight: 600 }}>
+          📦 Inventory usage
+        </h3>
+        {hasPermission(PERMISSIONS.USE_INVENTORY) && (
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "12px", marginBottom: "16px" }}>
+            <div style={{ minWidth: "200px", flex: "1 1 200px" }}>
+              <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>
+                Item key or ID
+              </label>
+              <input
+                type="text"
+                value={itemKey}
+                onChange={(e) => setItemKey(e.target.value)}
+                placeholder="Enter item ID or SKU"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}
+                autoComplete="off"
+              />
+              {lookupItem && (
+                <div className="small" style={{ marginTop: "6px", color: "var(--accent)" }}>
+                  ✓ {lookupItem.name} · stock {lookupItem.quantity} · ₹{Number(lookupItem.unitPrice).toFixed(2)}
+                </div>
+              )}
+              {lookupError && itemKey.trim() && (
+                <div className="small" style={{ marginTop: "6px", color: "#f87171" }}>{lookupError}</div>
+              )}
+            </div>
+            <div>
+              <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>Qty</label>
+              <input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                style={{ width: "72px", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={addInventoryUsage}
+              className="btn btn-primary"
+              style={{ padding: "10px 18px", fontSize: "14px" }}
+            >
+              Add item
+            </button>
+          </div>
+        )}
+        {invError && (
+          <div className="small" style={{ color: "#f87171", marginBottom: "12px" }}>{invError}</div>
+        )}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <th className="small muted" style={{ textAlign: "left", padding: "10px 8px", fontWeight: 600 }}>When</th>
+                <th className="small muted" style={{ textAlign: "left", padding: "10px 8px", fontWeight: 600 }}>Item</th>
+                <th className="small muted" style={{ textAlign: "left", padding: "10px 8px", fontWeight: 600 }}>Qty</th>
+                <th className="small muted" style={{ textAlign: "right", padding: "10px 8px", fontWeight: 600 }}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(repair.inventoryUsage || []).map((u) => (
+                <tr key={u.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                  <td style={{ padding: "10px 8px" }}>{new Date(u.createdAt).toLocaleString()}</td>
+                  <td style={{ padding: "10px 8px" }}>{u.inventory?.name ?? "—"}</td>
+                  <td style={{ padding: "10px 8px" }}>{u.quantityUsed}</td>
+                  <td style={{ padding: "10px 8px", textAlign: "right" }}>
+                    ₹{(Number(u.unitPriceAtUse) * u.quantityUsed).toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+              {(repair.inventoryUsage || []).length === 0 && (
+                <tr>
+                  <td colSpan={4} className="small muted" style={{ padding: "20px", textAlign: "center" }}>
+                    No inventory used yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -266,4 +310,3 @@ const RepairWorkspacePage = () => {
 };
 
 export default RepairWorkspacePage;
-

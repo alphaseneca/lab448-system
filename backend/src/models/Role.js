@@ -10,10 +10,14 @@ export default (sequelize) => {
         primaryKey: true,
         defaultValue: () => createId(),
       },
+      code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+      },
       name: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
       },
       description: {
         type: DataTypes.TEXT,

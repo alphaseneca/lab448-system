@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../utils/apiClient.js";
+import { useAuth } from "../state/AuthContext.jsx";
+import { ROLE_CODES, TECHNICIAN_LEVELS } from "../constants/permissions.js";
 
 const UsersPage = () => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -11,6 +14,8 @@ const UsersPage = () => {
     name: "",
     roleId: "",
     commissionRate: 0.2,
+    technicianLevel: "",
+    technicianLevelDisplay: "",
     isActive: true,
   });
   const [error, setError] = useState("");
@@ -41,6 +46,8 @@ const UsersPage = () => {
       name: "",
       roleId: roles[0]?.id || "",
       commissionRate: 0.2,
+      technicianLevel: "",
+      technicianLevelDisplay: "",
       isActive: true,
     });
     setError("");
@@ -54,30 +61,50 @@ const UsersPage = () => {
       password: "",
       name: user.name,
       roleId: user.roleId,
-      commissionRate: Number(user.commissionRate),
+      commissionRate: Number(user.commissionRate || 0),
+      technicianLevel: user.technicianLevel || "",
+      technicianLevelDisplay: user.technicianLevelDisplay || "",
       isActive: user.isActive,
     });
     setError("");
     setSuccess("");
   };
 
+  const selectedRole = roles.find((r) => r.id === form.roleId);
+  const isTechnicianRole = selectedRole?.code === ROLE_CODES.TECHNICIAN;
+
+  const adminUsers = users.filter((u) => u.roleCode === ROLE_CODES.ADMIN && u.isActive);
+  const isEditingSelf = editing && currentUser && editing === currentUser.id;
+  const editingUser = editing ? users.find((u) => u.id === editing) : null;
+  const isEditingLastAdmin =
+    editingUser?.roleCode === ROLE_CODES.ADMIN && adminUsers.length <= 1;
+  const roleChangeDisabled =
+    isEditingSelf && editingUser?.roleCode === ROLE_CODES.ADMIN
+      ? true
+      : isEditingLastAdmin;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    const payload = {
+      email: form.email,
+      name: form.name,
+      roleId: form.roleId,
+      isActive: form.isActive,
+      password: form.password || undefined,
+    };
+    if (isTechnicianRole) {
+      payload.commissionRate = Number(form.commissionRate);
+      if (form.technicianLevel) payload.technicianLevel = form.technicianLevel;
+      if (form.technicianLevelDisplay) payload.technicianLevelDisplay = form.technicianLevelDisplay;
+    }
     try {
       if (editing) {
-        await api.put(`/users/${editing}`, {
-          ...form,
-          commissionRate: Number(form.commissionRate),
-          password: form.password || undefined,
-        });
+        await api.put(`/users/${editing}`, payload);
         setSuccess("User updated successfully");
       } else {
-        await api.post("/users", {
-          ...form,
-          commissionRate: Number(form.commissionRate),
-        });
+        await api.post("/users", { ...payload, password: form.password });
         setSuccess("User created successfully");
       }
       await load();
@@ -195,35 +222,72 @@ const UsersPage = () => {
             </div>
             <div className="col">
               <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>
-                Role *
+                Role * {roleChangeDisabled && "(locked - must keep at least one admin)"}
               </label>
-              <select style={{ width: "100%" }} value={form.roleId} onChange={update("roleId")} required>
+              <select
+                style={{
+                  width: "100%",
+                  opacity: roleChangeDisabled ? 0.7 : 1,
+                  cursor: roleChangeDisabled ? "not-allowed" : "pointer",
+                }}
+                value={form.roleId}
+                onChange={update("roleId")}
+                required
+                disabled={roleChangeDisabled}
+              >
                 <option value="">Select role</option>
                 {roles.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} {r.description && `- ${r.description}`}
+                    {r.name} {r.code && `(${r.code})`}
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="row">
-            <div className="col">
-              <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>
-                Commission Rate (0-1)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="1"
-                step="0.01"
-                style={{ width: "100%" }}
-                value={form.commissionRate}
-                onChange={update("commissionRate")}
-              />
+          {isTechnicianRole && (
+            <div className="row">
+              <div className="col">
+                <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>
+                  Commission Rate (0-1)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  style={{ width: "100%" }}
+                  value={form.commissionRate}
+                  onChange={update("commissionRate")}
+                />
+              </div>
+              <div className="col">
+                <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>
+                  Technician Level
+                </label>
+                <select
+                  style={{ width: "100%" }}
+                  value={form.technicianLevel}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setForm((f) => ({
+                      ...f,
+                      technicianLevel: code,
+                      technicianLevelDisplay: code ? TECHNICIAN_LEVELS[code] : "",
+                    }));
+                  }}
+                >
+                  <option value="">-</option>
+                  {Object.entries(TECHNICIAN_LEVELS).map(([code, display]) => (
+                    <option key={code} value={code}>{display}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="col" style={{ display: "flex", alignItems: "flex-end", paddingBottom: "10px" }}>
+          )}
+
+          <div className="row">
+            <div className="col" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                 <input
                   type="checkbox"
@@ -258,7 +322,7 @@ const UsersPage = () => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Commission</th>
+                <th>Commission / Level</th>
                 <th>Status</th>
                 <th>Created</th>
                 <th style={{ textAlign: "right" }}>Actions</th>
@@ -283,7 +347,20 @@ const UsersPage = () => {
                       {u.roleName}
                     </span>
                   </td>
-                  <td className="small">{(Number(u.commissionRate) * 100).toFixed(0)}%</td>
+                  <td className="small">
+                    {u.roleCode === ROLE_CODES.TECHNICIAN ? (
+                      <>
+                        {(Number(u.commissionRate || 0) * 100).toFixed(0)}%
+                        {u.technicianLevelDisplay && (
+                          <span className="muted" style={{ marginLeft: "6px" }}>
+                            · {u.technicianLevelDisplay}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td>
                     {u.isActive ? (
                       <span style={{ color: "#4ade80", fontSize: "12px" }}>● Active</span>
@@ -305,7 +382,19 @@ const UsersPage = () => {
                     <button
                       onClick={() => handleDelete(u.id)}
                       className="btn btn-ghost"
-                      style={{ fontSize: "12px", padding: "6px 12px", color: "#f87171" }}
+                      style={{
+                        fontSize: "12px",
+                        padding: "6px 12px",
+                        color: "#f87171",
+                        opacity: u.roleCode === ROLE_CODES.ADMIN && adminUsers.length <= 1 ? 0.5 : 1,
+                        cursor: u.roleCode === ROLE_CODES.ADMIN && adminUsers.length <= 1 ? "not-allowed" : "pointer",
+                      }}
+                      disabled={u.roleCode === ROLE_CODES.ADMIN && adminUsers.length <= 1}
+                      title={
+                        u.roleCode === ROLE_CODES.ADMIN && adminUsers.length <= 1
+                          ? "Cannot delete the last admin"
+                          : "Delete user"
+                      }
                     >
                       Delete
                     </button>

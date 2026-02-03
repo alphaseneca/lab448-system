@@ -43,6 +43,10 @@ export default (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      repairCategoryId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       flatChargeAmount: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
@@ -109,6 +113,10 @@ export default (sequelize) => {
     Repair.belongsTo(models.User, {
       foreignKey: "assignedToUserId",
       as: "assignedTo",
+    });
+    Repair.belongsTo(models.RepairCategory, {
+      foreignKey: "repairCategoryId",
+      as: "repairCategory",
     });
     Repair.hasMany(models.RepairCharge, {
       foreignKey: "repairId",

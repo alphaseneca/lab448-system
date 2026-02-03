@@ -18,6 +18,11 @@ export default (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      phone2: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: "Alternate / second phone number",
+      },
       email: {
         type: DataTypes.STRING,
         allowNull: true,

@@ -26,6 +26,7 @@ export const ALLOWED_STATUS_TRANSITIONS = {
 };
 
 export const PERMISSIONS = {
+  // Legacy (kept for backward compatibility)
   VIEW_DASHBOARD: "view:dashboard",
   MANAGE_INVENTORY: "manage:inventory",
   INTAKE_REPAIR: "repair:intake",
@@ -34,5 +35,36 @@ export const PERMISSIONS = {
   MANAGE_BILLING: "repair:billing",
   TAKE_PAYMENT: "repair:payment",
   MANAGE_USERS: "users:manage",
+  // New permission keys
+  REPAIR_VIEW: "repair:view",
+  REPAIR_VIEW_ALL: "repair:view_all",
+  REPAIR_CREATE: "repair:create",
+  REPAIR_ADD_NOTES: "repair:add_notes",
+  INVENTORY_REQUEST: "inventory:request",
+  INVENTORY_MANAGE: "inventory:manage",
+  INVENTORY_ASSIGN: "inventory:assign_to_repair",
+  PAYMENT_RECEIVE: "payment:receive",
+  PAYMENT_MANAGE: "payment:manage",
+  REPAIR_VIEW_BILLING: "repair:view_billing",
+  REPORTS_FINANCIAL: "reports:financial",
+  REPORTS_OPERATIONS: "reports:operations",
+  USER_VIEW: "user:view",
+  ADMIN_WILDCARD: "*:*",
+};
+
+export const ROLE_CODES = {
+  TECHNICIAN: "TECHNICIAN",
+  FRONT_DESK: "FRONT_DESK",
+  LOGISTICS: "LOGISTICS",
+  FINANCE: "FINANCE",
+  MANAGER: "MANAGER",
+  ADMIN: "ADMIN",
+};
+
+export const TECHNICIAN_LEVELS = {
+  JUNIOR: { display: "Repair Soldier" },
+  SENIOR: { display: "Repair Sergeant" },
+  EXPERT: { display: "Repair Commander" },
+  MASTER: { display: "Repair General" },
 };
 

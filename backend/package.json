@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "db:sync": "node src/scripts/db-sync.js"
+    "db:sync": "node src/scripts/db-sync.js",
+    "db:seed-categories": "node src/scripts/seed-repair-categories.js",
+    "db:seed-roles": "node src/scripts/seed-roles.js",
+    "fix-admin": "node src/scripts/fix-admin.js"
   },
   "keywords": [
     "express",

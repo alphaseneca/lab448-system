@@ -21,12 +21,26 @@ Defined in `backend/src/models/`:
 
 - `users` (with `commissionRate` for staff share) and `roles` (permissions as JSONB)
 - `customers`, `device_categories`, `devices`
-- `repairs` (core table with QR token, lifecycle timestamps, totals and splits)
+- `repairs` (core table with QR token, lifecycle timestamps, totals and splits; optional `repair_category_id` for flat-rate category)
+- `repair_categories` (hierarchical Category1 → Category2 → Category3 with `flat_rate` on Level 3)
+- `qr_daily_sequences` (daily counter per date for human-readable QR tokens; see [QR tokens](#qr-tokens) below)
 - `inventories`, `inventory_usages`
 - `repair_charges`, `payments`
 - `audit_logs`
 
 All models use Sequelize v6 with proper associations and validations.
+
+#### QR tokens
+
+Each repair gets a unique **QR token** used for scanning and lookup:
+
+- **Format**: `LAB` + `YYMMDD` + 4-digit daily sequence (e.g. `LAB2501310001`, `LAB2501311000`). No dash between date and digits.
+- **Date**: Derived from the backend server’s `Date.now()` at intake (YYMMDD = server local date). No client-supplied date is used.
+- **Sequence**: Resets each day; supports 0001–9999 per day. Stored in `qr_daily_sequences` (one row per date key `YYMMDD`).
+- **Lookup**: `GET /repairs/by-qr/:token`. Older/legacy tokens may no longer be valid; only tokens stored in the DB work.
+- **Frontend**: The actual QR code (scannable image) is shown in the **Queue** page when you click a token, and in the **Repair workspace** in the Customer card.
+
+Implementation: `backend/src/models/QrDailySequence.js`, `backend/src/routes/repairs.js` (`generateQrToken(transaction)`). Frontend: `qrcode.react` on Queue and Repair workspace pages.
 
 #### Backend setup
 
@@ -53,13 +67,19 @@ npm run db:sync
 
 This will create all tables and relationships using Sequelize's `sync({ alter: true })`.
 
-4. Start the API:
+4. (Optional) Seed repair categories (Category1/2/3 with flat rates for cost calculation):
+
+```bash
+npm run db:seed-categories
+```
+
+5. Start the API:
 
 ```bash
 npm run dev
 ```
 
-The API will be available at `http://localhost:4000`.
+The API will be available at `http://localhost:4000`. Repair flat rates are driven by the hierarchical **repair category** (Category Level 1 → 2 → 3); select a Level 3 category on intake to apply its flat rate automatically. A **front desk charge** (₹) is added on every intake; edit `backend/charges.json` to change the amount (default ₹100)—no DB migration needed.
 
 #### Initial admin user
 
@@ -78,7 +98,7 @@ This admin role has all permissions and can be used to log in from the PWA.
 - **Screens**:
   - **Login**: JWT-based login against `/api/auth/login`
   - **Dashboard**: High-level stats (total/open repairs, total and today revenue) with quick action buttons
-  - **Intake**: Create customer + device + repair with optional flat charge; QR token displayed
+  - **Intake**: Create customer + device + repair; optional Category1/2/3 selection applies flat rate, or manual flat charge; QR token displayed
   - **To-Repair queue**: Shows `TO_REPAIR` repairs, allows moving to `IN_REPAIR`
   - **QR scan**: Camera-based QR scanner + manual token entry to open a repair
   - **Repair workspace**:
@@ -93,6 +113,8 @@ This admin role has all permissions and can be used to log in from the PWA.
     - Record payments; when fully paid, bill locks and staff/shop split is stored
 
 Role-based access control is enforced both **server-side (middleware)** and **client-side (UI hides unauthorized navigation/actions)**.
+
+Set `VITE_APP_CANONICAL_ORIGIN=http://YOUR_PC_IP:5173` in `frontend/.env` so localhost redirects there and you get one session everywhere. Restart the frontend after changing `.env`.
 
 The frontend features a modern, glassmorphic design with:
 - Gradient stat cards with visual hierarchy
@@ -119,7 +141,7 @@ npm run dev
 
 The app will be served at `http://localhost:5173` and proxies `/api` to the backend at `http://localhost:4000`.
 
-3. Build for production:
+4. Build for production:
 
 ```bash
 npm run build

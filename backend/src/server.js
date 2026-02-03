@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
+import path from "path";
+import fs from "fs";
 import { PORT } from "./config.js";
 import { sequelize } from "./db.js";
 import authRoutes from "./routes/auth.js";
@@ -8,6 +10,8 @@ import repairsRoutes from "./routes/repairs.js";
 import inventoryRoutes from "./routes/inventory.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import usersRoutes from "./routes/users.js";
+import repairCategoriesRoutes from "./routes/repairCategories.js";
+import customersRoutes from "./routes/customers.js";
 
 const app = express();
 
@@ -37,6 +41,18 @@ app.use("/api/repairs", repairsRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/repair-categories", repairCategoriesRoutes);
+app.use("/api/customers", customersRoutes);
+
+// In production (e.g. Docker), serve built frontend from ./public (SPA fallback)
+const publicPath = path.join(process.cwd(), "public");
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(publicPath, "index.html"));
+  });
+}
 
 app.use((err, req, res, next) => {
   console.error("Unhandled error", err);

@@ -10,14 +10,8 @@ const BillingPage = () => {
   const { hasPermission } = useAuth();
   const [billing, setBilling] = useState(null);
   const [repair, setRepair] = useState(null);
-  const [newCharge, setNewCharge] = useState({
-    description: "",
-    amount: 0,
-  });
-  const [payment, setPayment] = useState({
-    amount: 0,
-    method: "CASH",
-  });
+  const [newCharge, setNewCharge] = useState({ description: "", amount: 0 });
+  const [payment, setPayment] = useState({ amount: 0, method: "CASH" });
   const [error, setError] = useState("");
   const [paymentError, setPaymentError] = useState("");
 
@@ -61,157 +55,124 @@ const BillingPage = () => {
       setPayment({ amount: 0, method: "CASH" });
       await load();
     } catch (err) {
-      setPaymentError(
-        err.response?.data?.message || "Failed to record payment"
-      );
+      setPaymentError(err.response?.data?.message || "Failed to record payment");
     }
   };
 
   if (!billing || !repair) {
-    return <div className="text-slate-300">Loading billing...</div>;
+    return (
+      <div className="content">
+        <p className="muted">Loading billing...</p>
+      </div>
+    );
   }
 
   const remaining = billing.due;
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="content">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "8px" }}>
         <div>
-          <h2 className="text-xl font-semibold text-white">
-            Billing &amp; payment
+          <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
+            💳 Billing & payment
           </h2>
-          <p className="text-sm text-slate-400">
-            {repair.customer.name} · {repair.device.brand} {repair.device.model}
+          <p className="muted small" style={{ marginTop: "4px" }}>
+            {repair.customer?.name} · {repair.device?.brand} {repair.device?.model}
           </p>
         </div>
         <button
+          type="button"
           onClick={() => navigate(`/repairs/${id}`)}
-          className="inline-flex items-center rounded-md border border-slate-700 text-sm font-medium text-slate-200 px-4 py-2"
+          className="btn btn-ghost"
+          style={{ padding: "10px 20px", fontSize: "14px" }}
         >
-          Back to workspace
+          ← Back to repair dashboard
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-200">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
+        <div className="card" style={{ padding: "18px" }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 600, color: "var(--muted)" }}>
             Bill summary
           </h3>
-          <div className="space-y-1 text-sm text-slate-200">
-            <div className="flex justify-between">
-              <span>Total charges</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span className="muted">Total charges</span>
               <span>₹{billing.total.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Paid</span>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span className="muted">Paid</span>
               <span>₹{billing.paid.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between font-semibold">
-              <span>Due</span>
+            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 600, marginTop: "4px" }}>
+              <span className="muted">Due</span>
               <span>₹{billing.due.toFixed(2)}</span>
             </div>
           </div>
-          <div className="mt-2 text-xs text-slate-400">
-            Staff share (when fully paid): ₹
-            {Number(repair.staffShareAmount).toFixed(2)} · Shop share: ₹
-            {Number(repair.shopShareAmount).toFixed(2)}
+          <div className="small muted" style={{ marginTop: "14px" }}>
+            Staff share (when fully paid): ₹{Number(repair.staffShareAmount).toFixed(2)} · Shop: ₹{Number(repair.shopShareAmount).toFixed(2)}
           </div>
-          <div className="mt-2 text-xs text-slate-400">
-            Bill status:{" "}
-            <span className="font-medium">
-              {billing.isLocked ? "Locked (no further changes)" : "Open"}
-            </span>
+          <div className="small muted" style={{ marginTop: "6px" }}>
+            Status: <strong style={{ color: "var(--text)" }}>{billing.isLocked ? "Locked" : "Open"}</strong>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-200">Charges</h3>
+        <div className="card" style={{ padding: "18px" }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 600, color: "var(--muted)" }}>
+            Charges
+          </h3>
           {hasPermission(PERMISSIONS.MANAGE_BILLING) && !billing.isLocked && (
-            <form onSubmit={addCharge} className="space-y-2 mb-3">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  Description
-                </label>
+            <form onSubmit={addCharge} style={{ marginBottom: "16px" }}>
+              <div style={{ marginBottom: "10px" }}>
+                <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>Description</label>
                 <input
-                  className="w-full rounded-md bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+                  style={inputStyle}
                   value={newCharge.description}
-                  onChange={(e) =>
-                    setNewCharge((c) => ({
-                      ...c,
-                      description: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setNewCharge((c) => ({ ...c, description: e.target.value }))}
                   required
                 />
               </div>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Amount (₹)
-                  </label>
+              <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}>
+                  <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>Amount (₹)</label>
                   <input
                     type="number"
                     min="0.01"
                     step="0.01"
-                    className="w-full rounded-md bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+                    style={inputStyle}
                     value={newCharge.amount}
-                    onChange={(e) =>
-                      setNewCharge((c) => ({
-                        ...c,
-                        amount: e.target.value,
-                      }))
-                    }
+                    onChange={(e) => setNewCharge((c) => ({ ...c, amount: e.target.value }))}
                     required
                   />
                 </div>
-                <button
-                  type="submit"
-                  className="inline-flex items-center rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white px-3 py-2"
-                >
+                <button type="submit" className="btn btn-primary" style={{ padding: "10px 16px" }}>
                   Add charge
                 </button>
               </div>
-              {error && (
-                <div className="text-xs text-red-400 bg-red-950/40 border border-red-800 rounded-md px-3 py-2">
-                  {error}
-                </div>
-              )}
+              {error && <div className="small" style={{ color: "#f87171", marginTop: "8px" }}>{error}</div>}
             </form>
           )}
-          <div className="border-t border-slate-800 pt-2 max-h-64 overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="text-slate-400">
-                <tr>
-                  <th className="py-1 text-left font-medium">When</th>
-                  <th className="py-1 text-left font-medium">Description</th>
-                  <th className="py-1 text-right font-medium">Amount</th>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px", maxHeight: "260px", overflowY: "auto" }}>
+            <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <th className="small muted" style={{ textAlign: "left", padding: "8px", fontWeight: 600 }}>When</th>
+                  <th className="small muted" style={{ textAlign: "left", padding: "8px", fontWeight: 600 }}>Description</th>
+                  <th className="small muted" style={{ textAlign: "right", padding: "8px", fontWeight: 600 }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {billing.charges.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-slate-800/80 text-slate-200"
-                  >
-                    <td className="py-1">
-                      {new Date(c.createdAt).toLocaleString()}
-                    </td>
-                    <td className="py-1">
-                      {c.type} · {c.description}
-                    </td>
-                    <td className="py-1 text-right">
-                      ₹{Number(c.amount).toFixed(2)}
-                    </td>
+                  <tr key={c.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding: "8px" }}>{new Date(c.createdAt).toLocaleString()}</td>
+                    <td style={{ padding: "8px" }}>{c.type} · {c.description}</td>
+                    <td style={{ padding: "8px", textAlign: "right" }}>₹{Number(c.amount).toFixed(2)}</td>
                   </tr>
                 ))}
                 {billing.charges.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={3}
-                      className="py-3 text-center text-slate-400"
-                    >
-                      No charges yet.
-                    </td>
+                    <td colSpan={3} className="small muted" style={{ padding: "16px", textAlign: "center" }}>No charges yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -219,89 +180,60 @@ const BillingPage = () => {
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-200">Payments</h3>
+        <div className="card" style={{ padding: "18px" }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 600, color: "var(--muted)" }}>
+            Payments
+          </h3>
           {hasPermission(PERMISSIONS.TAKE_PAYMENT) && !billing.isLocked && (
-            <form onSubmit={recordPayment} className="space-y-2 mb-3">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  Amount (₹)
-                </label>
+            <form onSubmit={recordPayment} style={{ marginBottom: "16px" }}>
+              <div style={{ marginBottom: "10px" }}>
+                <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>Amount (₹)</label>
                 <input
                   type="number"
                   min="0.01"
                   max={remaining}
                   step="0.01"
-                  className="w-full rounded-md bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+                  style={inputStyle}
                   value={payment.amount}
-                  onChange={(e) =>
-                    setPayment((p) => ({ ...p, amount: e.target.value }))
-                  }
+                  onChange={(e) => setPayment((p) => ({ ...p, amount: e.target.value }))}
                   required
                 />
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">
-                  Method
-                </label>
-                <select
-                  className="w-full rounded-md bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
-                  value={payment.method}
-                  onChange={(e) =>
-                    setPayment((p) => ({ ...p, method: e.target.value }))
-                  }
-                >
+              <div style={{ marginBottom: "10px" }}>
+                <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>Method</label>
+                <select style={inputStyle} value={payment.method} onChange={(e) => setPayment((p) => ({ ...p, method: e.target.value }))}>
                   <option value="CASH">Cash</option>
                   <option value="CARD">Card</option>
                   <option value="BANK_TRANSFER">Bank transfer</option>
                   <option value="OTHER">Other</option>
                 </select>
               </div>
-              <button
-                type="submit"
-                className="inline-flex items-center rounded-md bg-sky-600 hover:bg-sky-500 text-xs font-medium text-white px-3 py-2"
-              >
+              <button type="submit" className="btn btn-primary" style={{ padding: "10px 18px" }}>
                 Record payment
               </button>
-              {paymentError && (
-                <div className="text-xs text-red-400 bg-red-950/40 border border-red-800 rounded-md px-3 py-2">
-                  {paymentError}
-                </div>
-              )}
+              {paymentError && <div className="small" style={{ color: "#f87171", marginTop: "8px" }}>{paymentError}</div>}
             </form>
           )}
-          <div className="border-t border-slate-800 pt-2 max-h-64 overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="text-slate-400">
-                <tr>
-                  <th className="py-1 text-left font-medium">When</th>
-                  <th className="py-1 text-left font-medium">Method</th>
-                  <th className="py-1 text-right font-medium">Amount</th>
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px", maxHeight: "260px", overflowY: "auto" }}>
+            <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <th className="small muted" style={{ textAlign: "left", padding: "8px", fontWeight: 600 }}>When</th>
+                  <th className="small muted" style={{ textAlign: "left", padding: "8px", fontWeight: 600 }}>Method</th>
+                  <th className="small muted" style={{ textAlign: "right", padding: "8px", fontWeight: 600 }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {billing.payments.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-slate-800/80 text-slate-200"
-                  >
-                    <td className="py-1">
-                      {new Date(p.receivedAt).toLocaleString()}
-                    </td>
-                    <td className="py-1">{p.method}</td>
-                    <td className="py-1 text-right">
-                      ₹{Number(p.amount).toFixed(2)}
-                    </td>
+                  <tr key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding: "8px" }}>{new Date(p.receivedAt).toLocaleString()}</td>
+                    <td style={{ padding: "8px" }}>{p.method}</td>
+                    <td style={{ padding: "8px", textAlign: "right" }}>₹{Number(p.amount).toFixed(2)}</td>
                   </tr>
                 ))}
                 {billing.payments.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={3}
-                      className="py-3 text-center text-slate-400"
-                    >
-                      No payments yet.
-                    </td>
+                    <td colSpan={3} className="small muted" style={{ padding: "16px", textAlign: "center" }}>No payments yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -314,4 +246,3 @@ const BillingPage = () => {
 };
 
 export default BillingPage;
-

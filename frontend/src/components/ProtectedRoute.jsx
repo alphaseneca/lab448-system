@@ -5,12 +5,24 @@ import { useAuth } from "../state/AuthContext.jsx";
 export const ProtectedRoute = ({
   children,
   requiredPermissions = [],
-  requireAll = true
+  requiredRoles = [],
+  requireAll = true,
 }) => {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, hasRole } = useAuth();
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requiredRoles.length) {
+    const hasAccess = requiredRoles.some((r) => hasRole(r));
+    if (!hasAccess) {
+      return (
+        <div style={{ padding: "32px", textAlign: "center", color: "var(--muted)" }}>
+          You do not have permission to view this page.
+        </div>
+      );
+    }
   }
 
   if (requiredPermissions.length) {

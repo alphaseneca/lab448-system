@@ -6,14 +6,38 @@ import {
   PERMISSIONS,
   REPAIR_STATUS,
 } from "../config.js";
+import { getFrontdeskCharge } from "../chargesConfig.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 import { logAudit } from "../middleware/audit.js";
 
 const router = express.Router();
 
-const generateQrToken = () =>
-  Math.random().toString(36).substring(2, 10) +
-  Math.random().toString(36).substring(2, 10);
+/**
+ * Generates a unique human-readable QR token: LAB + YYMMDD + 4-digit daily sequence (e.g. LAB2501310001).
+ * Date key is derived from server Date.now() (YYMMDD). Sequence resets per day. Must be called inside a transaction.
+ * @param {import("sequelize").Transaction} transaction
+ * @returns {Promise<string>}
+ */
+async function generateQrToken(transaction) {
+  const d = new Date();
+  const dateKey =
+    String(d.getFullYear()).slice(-2) +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0");
+  await db.QrDailySequence.findOrCreate({
+    where: { dateKey },
+    defaults: { lastValue: 0 },
+    transaction,
+  });
+  const row = await db.QrDailySequence.findOne({
+    where: { dateKey },
+    lock: transaction.LOCK.UPDATE,
+    transaction,
+  });
+  const nextVal = (row.lastValue ?? 0) + 1;
+  await row.update({ lastValue: nextVal }, { transaction });
+  return `LAB${dateKey}${String(nextVal).padStart(4, "0")}`;
+}
 
 const recalcRepairTotals = async (repairId, transaction = null) => {
   const charges = await db.RepairCharge.findAll({
@@ -35,13 +59,28 @@ router.post(
   "/intake",
   authorize([PERMISSIONS.INTAKE_REPAIR]),
   async (req, res) => {
-    const { customer, device, intakeNotes, flatChargeAmount = 0 } = req.body;
+    const { customer, device, intakeNotes, flatChargeAmount: bodyFlatCharge, repairCategoryId } = req.body;
 
     if (!customer?.name) {
       return res.status(400).json({ message: "Customer name is required" });
     }
 
     try {
+      let flatChargeAmount = Number(bodyFlatCharge || 0);
+      let categoryRecord = null;
+
+      if (repairCategoryId) {
+        categoryRecord = await db.RepairCategory.findByPk(repairCategoryId);
+        if (!categoryRecord) {
+          return res.status(400).json({ message: "Invalid repair category" });
+        }
+        if (categoryRecord.level !== 3) {
+          return res.status(400).json({ message: "Please select a Category Level 3 (leaf) for flat rate" });
+        }
+        const rate = categoryRecord.flatRate != null ? Number(categoryRecord.flatRate) : 0;
+        if (rate > 0) flatChargeAmount = rate;
+      }
+
       const result = await sequelize.transaction(async (t) => {
         let customerRecord;
 
@@ -52,10 +91,15 @@ router.post(
         }
 
         if (!customerRecord) {
+          const hasPrimaryPhone = customer.phone != null && String(customer.phone).trim() !== "";
+          if (!hasPrimaryPhone) {
+            throw new Error("CUSTOMER_PRIMARY_PHONE_REQUIRED");
+          }
           customerRecord = await db.Customer.create(
             {
               name: customer.name,
               phone: customer.phone,
+              phone2: customer.phone2,
               email: customer.email,
               address: customer.address,
             },
@@ -75,7 +119,7 @@ router.post(
           { transaction: t }
         );
 
-        const qrToken = generateQrToken();
+        const qrToken = await generateQrToken(t);
 
         const repair = await db.Repair.create(
           {
@@ -84,18 +128,36 @@ router.post(
             status: REPAIR_STATUS.INTAKE,
             qrToken,
             intakeNotes: intakeNotes || null,
+            repairCategoryId: categoryRecord?.id || null,
             flatChargeAmount: flatChargeAmount || 0,
           },
           { transaction: t }
         );
 
         if (flatChargeAmount > 0) {
+          const desc = categoryRecord
+            ? `Flat rate: ${categoryRecord.name}`
+            : "Intake flat charge";
           await db.RepairCharge.create(
             {
               repairId: repair.id,
               type: "FLAT",
-              description: "Intake flat charge",
+              description: desc,
               amount: flatChargeAmount,
+              createdByUserId: req.user.id,
+            },
+            { transaction: t }
+          );
+        }
+
+        const frontdeskCharge = getFrontdeskCharge();
+        if (frontdeskCharge > 0) {
+          await db.RepairCharge.create(
+            {
+              repairId: repair.id,
+              type: "FLAT",
+              description: "Front desk charge",
+              amount: frontdeskCharge,
               createdByUserId: req.user.id,
             },
             { transaction: t }
@@ -111,7 +173,7 @@ router.post(
             entityType: "Repair",
             entityId: repair.id,
             action: "INTAKE_CREATED",
-            metadata: { intakeNotes, flatChargeAmount },
+            metadata: { intakeNotes, flatChargeAmount, repairCategoryId: categoryRecord?.id, frontdeskCharge },
           },
           t
         );
@@ -122,6 +184,9 @@ router.post(
       res.status(201).json(result);
     } catch (err) {
       console.error("Intake error", err);
+      if (err.message === "CUSTOMER_PRIMARY_PHONE_REQUIRED") {
+        return res.status(400).json({ message: "Please fill your primary phone number" });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   }
@@ -194,17 +259,20 @@ router.post(
 );
 
 // Use inventory on a repair: atomically decrement stock, create usage and charge
+// Body: inventoryId (optional) OR itemKey (id or sku), and quantity
 router.post(
   "/:id/use-inventory",
   authorize([PERMISSIONS.USE_INVENTORY]),
   async (req, res) => {
     const { id } = req.params;
-    const { inventoryId, quantity } = req.body;
+    const { inventoryId, itemKey, quantity } = req.body;
 
-    if (!inventoryId || !quantity || quantity <= 0) {
+    const hasId = inventoryId != null && String(inventoryId).trim() !== "";
+    const hasKey = itemKey != null && String(itemKey).trim() !== "";
+    if ((!hasId && !hasKey) || !quantity || quantity <= 0) {
       return res
         .status(400)
-        .json({ message: "inventoryId and positive quantity are required" });
+        .json({ message: "inventoryId or itemKey (id/sku), and positive quantity are required" });
     }
 
     try {
@@ -217,9 +285,16 @@ router.post(
           throw new Error("BILL_LOCKED");
         }
 
-        const inventory = await db.Inventory.findByPk(inventoryId, {
-          transaction: t,
-        });
+        let inventory;
+        if (hasId) {
+          inventory = await db.Inventory.findByPk(inventoryId, { transaction: t });
+        } else {
+          const key = String(itemKey).trim();
+          inventory = await db.Inventory.findOne({
+            where: { isActive: true, [Op.or]: [{ id: key }, { sku: key }] },
+            transaction: t,
+          });
+        }
         if (!inventory || !inventory.isActive) {
           throw new Error("INVENTORY_NOT_FOUND");
         }
@@ -234,10 +309,11 @@ router.post(
           throw new Error("STOCK_WENT_NEGATIVE");
         }
 
+        const resolvedInventoryId = inventory.id;
         const usage = await db.InventoryUsage.create(
           {
             repairId: id,
-            inventoryId,
+            inventoryId: resolvedInventoryId,
             quantityUsed: quantity,
             unitPriceAtUse: inventory.unitPrice,
             createdByUserId: req.user.id,
@@ -268,7 +344,7 @@ router.post(
             entityType: "Repair",
             entityId: id,
             action: "INVENTORY_USED",
-            metadata: { inventoryId, quantity, chargeAmount },
+            metadata: { inventoryId: resolvedInventoryId, quantity, chargeAmount },
           },
           t
         );
@@ -401,8 +477,16 @@ router.post(
         let shopShareAmount = repair.shopShareAmount;
 
         if (shouldLock) {
-          const user = await db.User.findByPk(req.user.id, { transaction: t });
-          const staffRate = Number(user.commissionRate);
+          let staffRate = 0;
+          if (repair.assignedToUserId) {
+            const technician = await db.User.findByPk(repair.assignedToUserId, {
+              include: [{ model: db.Role, as: "role" }],
+              transaction: t,
+            });
+            if (technician?.role?.code === "TECHNICIAN" && technician.commissionRate != null) {
+              staffRate = Number(technician.commissionRate);
+            }
+          }
           staffShareAmount = total * staffRate;
           shopShareAmount = total - staffShareAmount;
         }
@@ -442,6 +526,82 @@ router.post(
           .status(400)
           .json({ message: "Payment exceeds total due" });
       }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+// Literal routes first so /queue and /by-qr are not matched by /:id
+// Get queue of repairs by status (e.g. TO_REPAIR)
+router.get(
+  "/queue",
+  authorize([PERMISSIONS.UPDATE_REPAIR_STATUS]),
+  async (req, res) => {
+    const { status } = req.query;
+    if (!status) {
+      return res
+        .status(400)
+        .json({ message: "Valid status query is required" });
+    }
+
+    const statusList = String(status)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const validStatuses = Object.values(REPAIR_STATUS);
+    const invalid = statusList.some((s) => !validStatuses.includes(s));
+    if (invalid) {
+      return res
+        .status(400)
+        .json({ message: "One or more invalid statuses" });
+    }
+
+    try {
+      const repairs = await db.Repair.findAll({
+        where: { status: { [Op.in]: statusList } },
+        include: [
+          {
+            model: db.Customer,
+            as: "customer",
+            attributes: ["id", "name", "phone", "email", "address", "createdAt", "updatedAt"],
+          },
+          { model: db.Device, as: "device" },
+        ],
+        order: [["createdAt", "ASC"]],
+      });
+      res.json(repairs);
+    } catch (err) {
+      console.error("Queue error", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+// Lookup repair by QR token
+router.get(
+  "/by-qr/:token",
+  authorize([PERMISSIONS.UPDATE_REPAIR_STATUS, PERMISSIONS.MANAGE_BILLING]),
+  async (req, res) => {
+    const { token } = req.params;
+    try {
+      const repair = await db.Repair.findOne({
+        where: { qrToken: token },
+        include: [
+          {
+            model: db.Customer,
+            as: "customer",
+            attributes: ["id", "name", "phone", "email", "address", "createdAt", "updatedAt"],
+          },
+          { model: db.Device, as: "device" },
+        ],
+      });
+      if (!repair) {
+        return res.status(404).json({ message: "Repair not found" });
+      }
+      res.json(repair);
+    } catch (err) {
+      console.error("by-qr error", err);
       res.status(500).json({ message: "Internal server error" });
     }
   }
@@ -487,73 +647,6 @@ router.get(
   }
 );
 
-// Get queue of repairs by status (e.g. TO_REPAIR)
-router.get(
-  "/queue",
-  authorize([PERMISSIONS.UPDATE_REPAIR_STATUS]),
-  async (req, res) => {
-    const { status } = req.query;
-    if (!status) {
-      return res
-        .status(400)
-        .json({ message: "Valid status query is required" });
-    }
-
-    const statusList = String(status)
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const validStatuses = Object.values(REPAIR_STATUS);
-    const invalid = statusList.some((s) => !validStatuses.includes(s));
-    if (invalid) {
-      return res
-        .status(400)
-        .json({ message: "One or more invalid statuses" });
-    }
-
-    try {
-      const repairs = await db.Repair.findAll({
-        where: { status: { [Op.in]: statusList } },
-        include: [
-          { model: db.Customer, as: "customer" },
-          { model: db.Device, as: "device" },
-        ],
-        order: [["createdAt", "ASC"]],
-      });
-      res.json(repairs);
-    } catch (err) {
-      console.error("Queue error", err);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-);
-
-// Lookup repair by QR token
-router.get(
-  "/by-qr/:token",
-  authorize([PERMISSIONS.UPDATE_REPAIR_STATUS, PERMISSIONS.MANAGE_BILLING]),
-  async (req, res) => {
-    const { token } = req.params;
-    try {
-      const repair = await db.Repair.findOne({
-        where: { qrToken: token },
-        include: [
-          { model: db.Customer, as: "customer" },
-          { model: db.Device, as: "device" },
-        ],
-      });
-      if (!repair) {
-        return res.status(404).json({ message: "Repair not found" });
-      }
-      res.json(repair);
-    } catch (err) {
-      console.error("by-qr error", err);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-);
-
 // Get single repair with full details
 router.get("/:id", authenticate, async (req, res) => {
   const { id } = req.params;
@@ -562,6 +655,7 @@ router.get("/:id", authenticate, async (req, res) => {
       include: [
         { model: db.Customer, as: "customer" },
         { model: db.Device, as: "device" },
+        { model: db.RepairCategory, as: "repairCategory" },
         { model: db.RepairCharge, as: "charges" },
         { model: db.Payment, as: "payments" },
         {

@@ -15,8 +15,9 @@ pids
 *.seed
 *.pid.lock
 
-# Environment files
+# Environment files (never commit real credentials; use *.example as template)
 .env
+backend/.env
 .env.*.local
 .env.local
 
