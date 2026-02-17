@@ -93,6 +93,16 @@ export default (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      smsIntakeSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: "When intake SMS was sent (once per repair)",
+      },
+      smsRepairedSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: "When repaired SMS was sent (once per repair)",
+      },
     },
     {
       tableName: "repairs",

@@ -7,6 +7,8 @@ import {
   REPAIR_STATUS,
 } from "../config.js";
 import { getFrontdeskCharge } from "../chargesConfig.js";
+import { SMS_MESSAGES, formatSmsMessage } from "../config.js";
+import { sendSms } from "../services/aakashSms.js";
 import { authenticate, authorize,checkPermission } from "../middleware/auth.js";
 import { logAudit } from "../middleware/audit.js";
 
@@ -265,6 +267,26 @@ router.post(
         return { repair, customer: customerRecord, device: deviceRecord };
       });
 
+      // Send intake SMS once (non-blocking for API response; errors logged only)
+      try {
+        const phone = result.customer?.phone;
+        if (phone) {
+          const text = formatSmsMessage(SMS_MESSAGES.INTAKE, {
+            customerName: result.customer.name,
+            qrToken: result.repair.qrToken,
+            date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+          });
+          const smsResult = await sendSms(phone, text);
+          if (smsResult.success) {
+            await result.repair.update({ smsIntakeSentAt: new Date() });
+          } else {
+            console.warn("Intake SMS not sent:", smsResult.error);
+          }
+        }
+      } catch (smsErr) {
+        console.error("Intake SMS error:", smsErr);
+      }
+
       res.status(201).json(result);
     } catch (err) {
       console.error("Intake error", err);
@@ -289,7 +311,9 @@ router.post(
     }
 
     try {
-      const repair = await db.Repair.findByPk(id);
+      const repair = await db.Repair.findByPk(id, {
+        include: [{ model: db.Customer, as: "customer" }],
+      });
       if (!repair) {
         return res.status(404).json({ message: "Repair not found" });
       }
@@ -334,7 +358,38 @@ router.post(
         metadata: { from: repair.status, to: newStatus },
       });
 
-      res.json(repair);
+      // Send repaired SMS once when status becomes REPAIRED or UNREPAIRABLE
+      const shouldSendRepairedSms =
+        (newStatus === REPAIR_STATUS.REPAIRED ||
+          newStatus === REPAIR_STATUS.UNREPAIRABLE) &&
+        !repair.smsRepairedSentAt &&
+        repair.customer?.phone;
+      if (shouldSendRepairedSms) {
+        try {
+          const template =
+            newStatus === REPAIR_STATUS.UNREPAIRABLE
+              ? SMS_MESSAGES.UNREPAIRABLE
+              : SMS_MESSAGES.REPAIRED;
+          const text = formatSmsMessage(template, {
+            customerName: repair.customer.name,
+            qrToken: repair.qrToken,
+            date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+          });
+          const smsResult = await sendSms(repair.customer.phone, text);
+          if (smsResult.success) {
+            await repair.update({ smsRepairedSentAt: now });
+          } else {
+            console.warn("Repaired SMS not sent:", smsResult.error);
+          }
+        } catch (smsErr) {
+          console.error("Repaired SMS error:", smsErr);
+        }
+      }
+
+      const updated = await db.Repair.findByPk(id, {
+        include: [{ model: db.Customer, as: "customer" }],
+      });
+      res.json(updated || repair);
     } catch (err) {
       console.error("Transition error", err);
       res.status(500).json({ message: "Internal server error" });

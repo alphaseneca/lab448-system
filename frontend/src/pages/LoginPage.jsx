@@ -16,7 +16,13 @@ const LoginPage = () => {
       await login(email, password);
       navigate("/");
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed");
+      const msg = err.response?.data?.message;
+      const status = err.response?.status;
+      if (msg) setError(msg);
+      else if (status === 401) setError("Invalid email or password.");
+      else if (status === 500) setError("Server error. Check backend logs and database.");
+      else if (!err.response) setError("Cannot reach server. Is the app running?");
+      else setError(err.message || "Login failed");
     }
   };
 
