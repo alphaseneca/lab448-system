@@ -299,6 +299,7 @@ router.get("/front-desk", fdOrAdmin, async (req, res) => {
         limit: 20,
       }),
       db.Repair.findAll({
+        where: { status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE"] } },
         include: [
           {
             model: db.Customer,
@@ -321,15 +322,46 @@ router.get("/front-desk", fdOrAdmin, async (req, res) => {
     const totalCustomersServed = new Set(allRepairs.map((r) => r.customerId))
       .size;
 
-    const pendingPayments = repairsWithPayments
+    const pendingPaymentsRaw = repairsWithPayments
       .filter((r) => !r.isLocked)
       .map((r) => {
         const paid = r.payments.reduce((s, p) => s + Number(p.amount), 0);
         const due = Number(r.totalCharges) - paid;
-        return { ...r.toJSON(), paid, due };
+        const json = r.toJSON();
+        const customerId = r.customerId ?? r.customer?.id ?? json.customerId ?? json.customer?.id;
+        return {
+          ...json,
+          customerId,
+          customer: json.customer ? { ...json.customer, id: json.customer.id ?? customerId } : null,
+          paid,
+          due,
+        };
       })
       .filter((r) => r.due > 0)
       .sort((a, b) => b.due - a.due)
+      .slice(0, 30);
+
+    const byCustomer = new Map();
+    for (const r of pendingPaymentsRaw) {
+      const cid = r.customerId ?? r.customer?.id ?? r.id;
+      const key = String(cid);
+      if (!byCustomer.has(key)) {
+        byCustomer.set(key, {
+          customerId: r.customerId ?? r.customer?.id ?? null,
+          customerName: r.customer?.name ?? "—",
+          due: 0,
+          repairIds: [],
+          firstRepairId: r.id,
+          qrTokens: [],
+        });
+      }
+      const row = byCustomer.get(key);
+      row.due += Number(r.due ?? 0);
+      row.repairIds.push(r.id);
+      row.qrTokens.push(r.qrToken);
+    }
+    const pendingPaymentsByCustomer = Array.from(byCustomer.values())
+      .filter((c) => c.due > 0)
       .slice(0, 20);
 
     res.json({
@@ -343,7 +375,8 @@ router.get("/front-desk", fdOrAdmin, async (req, res) => {
         revenue_collected: Number(monthPayments || 0),
       },
       recent_repairs: recentRepairs,
-      pending_payments: pendingPayments,
+      pending_payments: pendingPaymentsRaw,
+      pending_payments_by_customer: pendingPaymentsByCustomer,
     });
   } catch (err) {
     console.error("Front-desk dashboard error", err);
@@ -450,6 +483,7 @@ router.get("/finance", finOrAdmin, async (req, res) => {
           limit: 50,
         }),
         db.Repair.findAll({
+          where: { status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE"] } },
           include: [
             {
               model: db.Customer,
@@ -477,7 +511,15 @@ router.get("/finance", finOrAdmin, async (req, res) => {
       .map((r) => {
         const paid = r.payments.reduce((s, p) => s + Number(p.amount), 0);
         const due = Number(r.totalCharges) - paid;
-        return { ...r.toJSON(), paid, due };
+        const json = r.toJSON();
+        const customerId = r.customerId ?? r.customer?.id ?? json.customerId ?? json.customer?.id;
+        return {
+          ...json,
+          customerId,
+          customer: json.customer ? { ...json.customer, id: json.customer.id ?? customerId } : null,
+          paid,
+          due,
+        };
       })
       .filter((r) => r.due > 0);
 
@@ -486,6 +528,30 @@ router.get("/finance", finOrAdmin, async (req, res) => {
       (s, p) => s + Number(p.amount),
       0,
     );
+
+    // Group pending bills by customer so dashboard shows one row per customer with combined due
+    const byCustomer = new Map();
+    for (const r of pendingBills) {
+      const cid = r.customerId ?? r.customer?.id ?? r.id;
+      const key = String(cid);
+      if (!byCustomer.has(key)) {
+        byCustomer.set(key, {
+          customerId: r.customerId ?? r.customer?.id ?? null,
+          customerName: r.customer?.name ?? "—",
+          due: 0,
+          repairIds: [],
+          firstRepairId: r.id,
+          qrTokens: [],
+        });
+      }
+      const row = byCustomer.get(key);
+      row.due += Number(r.due ?? 0);
+      row.repairIds.push(r.id);
+      row.qrTokens.push(r.qrToken);
+    }
+    const pendingBillsByCustomer = Array.from(byCustomer.values())
+      .filter((c) => c.due > 0)
+      .slice(0, 30);
 
     res.json({
       today_collections: Number(todayPayments || 0),
@@ -496,6 +562,7 @@ router.get("/finance", finOrAdmin, async (req, res) => {
       },
       recent_payments: allPayments,
       pending_bills: pendingBills.slice(0, 30),
+      pending_bills_by_customer: pendingBillsByCustomer,
     });
   } catch (err) {
     console.error("Finance dashboard error", err);

@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../utils/apiClient.js";
+import { printBarcodeLabel } from "../components/BarcodeLabelPrint.jsx";
+import { getQrLabelConfig } from "../utils/qrLabelConfig.js";
 
 const InventoryPage = () => {
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [labelConfig, setLabelConfig] = useState(null);
   const [form, setForm] = useState({
     name: "",
     sku: "",
@@ -26,6 +29,7 @@ const InventoryPage = () => {
 
   useEffect(() => {
     load();
+    getQrLabelConfig().then(setLabelConfig);
     if (!window.JsBarcode) {
       const script = document.createElement("script");
       script.src =
@@ -185,77 +189,7 @@ const InventoryPage = () => {
       alert("Item has no SKU to generate barcode");
       return;
     }
-
-    const printWindow = window.open("", "_blank");
-
-    printWindow.document.write(`
-<html>
-<head>
-<title>Print Barcode - ${item.sku}</title>
-
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-
-<style>
-@page {
-  size: 58mm auto;
-  margin: 0;
-}
-
-body {
-  width: 58mm;
-  margin: 0;
-  padding: 4mm;
-  font-family: Arial, sans-serif;
-  text-align: center;
-}
-
-.label {
-  width: 100%;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 4px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-}
-
-</style>
-</head>
-
-<body>
-
-<div class="label">
-  <svg id="barcode"></svg>
-  <div class="info-row">
-    <div>${item.name}</div>
-    <div>${item.sku}</div>
-  </div>
-</div>
-
-<script>
-JsBarcode("#barcode", "${item.sku}", {
-  format: "CODE128",
-  width: 1.6,
-  height: 60,
-  displayValue: false,
-  margin: 0
-});
-
-window.onload = function(){
-  window.print();
-};
-</script>
-
-</body>
-</html>
-`);
-
-    printWindow.document.close();
+    printBarcodeLabel(item.name || "", item.sku, labelConfig || {});
   };
 
   const lowStockItems = items.filter((i) => i.quantity < 5 && i.isActive);
@@ -401,66 +335,7 @@ window.onload = function(){
             >
               <button
                 onClick={() => {
-                  const printWindow = window.open("", "_blank");
-                  printWindow.document.write(`
-<html>
-<head>
-<title>Print Barcode - ${generatedSKU}</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<style>
-@page {
-  size: 58mm auto;
-  margin: 0;
-}
-body {
-  width: 58mm;
-  margin: 0;
-  padding: 4mm;
-  font-family: Arial, sans-serif;
-  text-align: center;
-}
-.label {
-  width: 100%;
-}
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 4px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-}
-</style>
-</head>
-<body>
-<div class="label">
-  <svg id="print-barcode"></svg>
-  <div class="info-row">
-    <div>${generatedSKU}</div>
-    <div>${form.name || "New Inventory Item"}</div>
-  </div>
-</div>
-<script>
-JsBarcode("#print-barcode", "${generatedSKU}", {
-  format: "CODE128",
-  width: 1.6,
-  height: 60,
-  displayValue: false,
-  margin: 0
-});
-window.onload = function(){
-  window.print();
-  window.onafterprint = function() {
-    window.close();
-  };
-};
-</script>
-</body>
-</html>
-`);
-                  printWindow.document.close();
+                  printBarcodeLabel(form.name || "New Inventory Item", generatedSKU, labelConfig || {});
                 }}
                 className="btn btn-secondary"
                 style={{

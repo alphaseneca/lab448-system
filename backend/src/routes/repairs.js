@@ -593,6 +593,12 @@ router.post(
       if (repair.isLocked) {
         return res.status(400).json({ message: "Repair bill is locked" });
       }
+      const billableStatuses = [REPAIR_STATUS.REPAIRED, REPAIR_STATUS.UNREPAIRABLE];
+      if (!billableStatuses.includes(repair.status)) {
+        return res.status(400).json({
+          message: "Billing is only available when the item is marked Repaired or Unrepairable",
+        });
+      }
 
       const charge = await db.RepairCharge.create({
         repairId: id,
@@ -643,6 +649,10 @@ router.post(
         });
         if (!repair) {
           throw new Error("REPAIR_NOT_FOUND");
+        }
+        const billableStatuses = [REPAIR_STATUS.REPAIRED, REPAIR_STATUS.UNREPAIRABLE];
+        if (!billableStatuses.includes(repair.status)) {
+          throw new Error("BILLING_NOT_READY");
         }
 
         const paidSoFar = repair.payments.reduce(
@@ -717,6 +727,11 @@ router.post(
       console.error("Payment error", err);
       if (err.message === "REPAIR_NOT_FOUND") {
         return res.status(404).json({ message: "Repair not found" });
+      }
+      if (err.message === "BILLING_NOT_READY") {
+        return res.status(400).json({
+          message: "Billing is only available when the item is marked Repaired or Unrepairable",
+        });
       }
       if (err.message === "OVERPAYMENT") {
         return res.status(400).json({ message: "Payment exceeds total due" });

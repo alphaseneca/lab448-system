@@ -93,3 +93,13 @@ export function formatSmsMessage(template, data = {}) {
   }
   return out;
 }
+
+// ——— QR label (repair item) ———
+// Paper size, QR size, logo size, name font size. Override via .env for thermal/label printers.
+export const QR_LABEL = {
+  paperWidthMm: Number(process.env.QR_LABEL_PAPER_WIDTH_MM) || 50,
+  paperHeightMm: Number(process.env.QR_LABEL_PAPER_HEIGHT_MM) || 25,
+  qrSizeMm: Number(process.env.QR_LABEL_QR_SIZE_MM) || 20,
+  logoSizeMm: Number(process.env.QR_LABEL_LOGO_SIZE_MM) || 12,
+  nameFontSizePt: Number(process.env.QR_LABEL_NAME_FONT_SIZE_PT) || 6,
+};

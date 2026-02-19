@@ -71,7 +71,33 @@ const BillingPaymentsDashboard = () => {
   const today = data?.today_collections ?? 0;
   const month = data?.current_month || {};
   const recent = data?.recent_payments || [];
-  const pending = data?.pending_bills || [];
+  // Prefer backend-grouped list (one row per customer); fallback to client-side grouping
+  const pendingBillsByCustomer = data?.pending_bills_by_customer;
+  const pendingRaw = data?.pending_bills || [];
+  const pending = Array.isArray(pendingBillsByCustomer)
+    ? pendingBillsByCustomer
+    : (() => {
+        const pendingByCustomer = pendingRaw.reduce((acc, r) => {
+          const cid = r.customerId ?? r.customer?.id ?? null;
+          const key = cid ? String(cid) : `repair-${r.id}`;
+          if (!acc[key]) {
+            acc[key] = {
+              customerId: cid ?? key,
+              customerName: r.customer?.name ?? "—",
+              due: 0,
+              repairs: [],
+              firstRepairId: r.id,
+              qrTokens: [],
+            };
+          }
+          acc[key].due += Number(r.due ?? 0);
+          acc[key].repairs.push(r);
+          acc[key].qrTokens = acc[key].qrTokens || [];
+          acc[key].qrTokens.push(r.qrToken);
+          return acc;
+        }, {});
+        return Object.values(pendingByCustomer).filter((c) => c.due > 0);
+      })();
   const breakdown = month.payment_method_breakdown || {};
 
   return (
@@ -160,23 +186,47 @@ const BillingPaymentsDashboard = () => {
             <table>
               <thead>
                 <tr>
-                  <th>Repair</th>
                   <th>Customer</th>
+                  <th>Items</th>
                   <th>Due</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {pending.slice(0, 15).map((r) => (
-                  <tr key={r.id}>
-                    <td><code>{r.qrToken}</code></td>
-                    <td>{r.customer?.name}</td>
-                    <td>₹{Number(r.due || 0).toFixed(2)}</td>
-                    <td>
-                      <Link to={`/repairs/${r.id}/billing`} className="btn btn-primary">Collect</Link>
-                    </td>
-                  </tr>
-                ))}
+                {pending.slice(0, 15).map((c) => {
+                  const itemCount = c.repairIds?.length ?? c.repairs?.length ?? 1;
+                  const repairIds = c.repairIds ?? (c.repairs?.map((r) => r.id) ?? [c.firstRepairId]);
+                  const tokens = c.qrTokens ?? (c.repairs?.map((r) => r.qrToken) ?? []);
+                  return (
+                    <tr key={c.customerId ?? c.firstRepairId}>
+                      <td style={{ fontWeight: 500 }}>{c.customerName}</td>
+                      <td className="small muted">
+                        {itemCount} item{itemCount !== 1 ? "s" : ""}
+                        {repairIds.length > 0 && repairIds.length <= 5
+                          ? repairIds.map((rid, idx) => (
+                              <span key={rid}>
+                                {idx > 0 ? ", " : " "}
+                                <Link to={`/repairs/${rid}/billing`} style={{ color: "var(--accent)" }}>
+                                  {tokens[idx] ?? rid}
+                                </Link>
+                              </span>
+                            ))
+                          : tokens.length <= 3 && tokens.length > 0
+                            ? ` (${tokens.join(", ")})`
+                            : ""}
+                      </td>
+                      <td>₹{Number(c.due).toFixed(2)}</td>
+                      <td>
+                        <Link to={`/repairs/${c.firstRepairId}/billing`} className="btn btn-primary">Collect</Link>
+                        {itemCount > 1 && (
+                          <span className="small muted" style={{ display: "block", marginTop: "4px" }}>
+                            Or click an item above to bill that item only
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

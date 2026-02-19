@@ -160,9 +160,21 @@ const CustomerDetailPage = () => {
               <h2 style={{ margin: "0 0 8px", fontSize: "22px", fontWeight: 700 }}>
                 {customer.name}
               </h2>
-              <button type="button" className="btn btn-primary" onClick={startEdit} style={{ fontSize: "13px", padding: "8px 16px" }}>
-                Edit customer
-              </button>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {repairs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/repairs/${repairs[0].id}/billing`)}
+                    className="btn btn-primary"
+                    style={{ fontSize: "13px", padding: "8px 16px" }}
+                  >
+                    💳 Billing {repairs.length > 1 ? `(${repairs.length} items)` : ""}
+                  </button>
+                )}
+                <button type="button" className="btn" onClick={startEdit} style={{ fontSize: "13px", padding: "8px 16px" }}>
+                  Edit customer
+                </button>
+              </div>
             </div>
             <div className="small muted" style={{ marginBottom: "4px" }}>
               Phone: {customer.phone || "—"}

@@ -83,7 +83,32 @@ const FrontDeskDashboard = () => {
   const today = data?.today_stats || {};
   const month = data?.current_month_stats || {};
   const recent = data?.recent_repairs || [];
-  const pending = data?.pending_payments || [];
+  const pendingByCustomer = data?.pending_payments_by_customer;
+  const pendingRaw = data?.pending_payments || [];
+  const pending = Array.isArray(pendingByCustomer)
+    ? pendingByCustomer
+    : (() => {
+        const acc = {};
+        pendingRaw.forEach((r) => {
+          const cid = r.customerId ?? r.customer?.id ?? null;
+          const key = cid ? String(cid) : `repair-${r.id}`;
+          if (!acc[key]) {
+            acc[key] = {
+              customerId: cid ?? key,
+              customerName: r.customer?.name ?? "—",
+              due: 0,
+              repairIds: [],
+              firstRepairId: r.id,
+              qrTokens: [],
+            };
+          }
+          acc[key].due += Number(r.due ?? 0);
+          acc[key].repairIds.push(r.id);
+          acc[key].qrTokens = acc[key].qrTokens || [];
+          acc[key].qrTokens.push(r.qrToken);
+        });
+        return Object.values(acc).filter((c) => c.due > 0);
+      })();
 
   // If user doesn't have FRONT_DESK role
   if (!isFrontDeskUser) {
@@ -243,25 +268,46 @@ const FrontDeskDashboard = () => {
                   <table>
                     <thead>
                       <tr>
-                        <th>Repair</th>
+                        <th>Customer</th>
+                        <th>Items</th>
                         <th>Due</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pending.slice(0, 10).map((r) => (
-                        <tr key={r.id}>
-                          <td><code>{r.qrToken || r.id}</code></td>
-                          <td>₹{Number(r.due || 0).toFixed(2)}</td>
-                          <td>
-                            {canCollectPayments ? (
-                              <Link to={`/repairs/${r.id}/billing`} className="btn btn-primary" style={{ fontSize: "12px", padding: "4px 8px" }}>
-                                Collect
-                              </Link>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
+                      {pending.slice(0, 10).map((c) => {
+                        const itemCount = c.repairIds?.length ?? 1;
+                        const repairIds = c.repairIds ?? [c.firstRepairId];
+                        const tokens = c.qrTokens ?? [];
+                        return (
+                          <tr key={c.customerId ?? c.firstRepairId}>
+                            <td style={{ fontWeight: 500 }}>{c.customerName}</td>
+                            <td className="small muted">
+                              {itemCount} item{itemCount !== 1 ? "s" : ""}
+                              {repairIds.length > 0 && repairIds.length <= 5
+                                ? repairIds.map((rid, idx) => (
+                                    <span key={rid}>
+                                      {idx > 0 ? ", " : " "}
+                                      <Link to={`/repairs/${rid}/billing`} style={{ color: "var(--accent)" }}>
+                                        {tokens[idx] ?? rid}
+                                      </Link>
+                                    </span>
+                                  ))
+                                : tokens.length <= 3 && tokens.length > 0
+                                  ? ` (${tokens.join(", ")})`
+                                  : ""}
+                            </td>
+                            <td>₹{Number(c.due).toFixed(2)}</td>
+                            <td>
+                              {canCollectPayments ? (
+                                <Link to={`/repairs/${c.firstRepairId}/billing`} className="btn btn-primary" style={{ fontSize: "12px", padding: "4px 8px" }}>
+                                  Collect
+                                </Link>
+                              ) : null}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

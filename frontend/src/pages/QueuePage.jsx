@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../utils/apiClient.js";
 import { REPAIR_STATUS } from "../constants/statuses.js";
+import QrLabelPrint, { printQrLabel } from "../components/QrLabelPrint.jsx";
+import { getQrLabelConfig } from "../utils/qrLabelConfig.js";
 
 const PrintIcon = ({ size = 20, style = {} }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
@@ -44,24 +46,17 @@ const QueuePage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [qrModalToken, setQrModalToken] = useState(null);
+  const [qrModalCustomerName, setQrModalCustomerName] = useState("");
+  const [labelConfig, setLabelConfig] = useState(null);
   const qrModalPrintRef = useRef(null);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    getQrLabelConfig().then(setLabelConfig);
+  }, []);
 
 
-  const printQrContent = (ref) => {
-    if (!ref?.current) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(
-      `<!DOCTYPE html><html><head><title>QR Code</title><style>body{font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;background:#fff;}.token{font-family:monospace;margin-top:12px;font-size:14px;color:#333;}</style></head><body>${ref.current.innerHTML}</body></html>`
-    );
-    win.document.close();
-    win.onload = () => {
-      win.print();
-      win.close();
-    };
-  };
+
 
   const load = async () => {
     setLoading(true);
@@ -210,7 +205,10 @@ const QueuePage = () => {
                   <td>
                     <button
                       type="button"
-                      onClick={() => setQrModalToken(r.qrToken)}
+                      onClick={() => {
+                        setQrModalToken(r.qrToken);
+                        setQrModalCustomerName(r.customer?.name ?? "");
+                      }}
                       style={{
                         fontFamily: "monospace",
                         padding: "4px 8px",
@@ -302,7 +300,10 @@ const QueuePage = () => {
             justifyContent: "center",
             zIndex: 1000,
           }}
-          onClick={() => setQrModalToken(null)}
+          onClick={() => {
+            setQrModalToken(null);
+            setQrModalCustomerName("");
+          }}
         >
           <div
             style={{
@@ -324,8 +325,8 @@ const QueuePage = () => {
               </div>
               <button
                 type="button"
-                onClick={() => printQrContent(qrModalPrintRef)}
-                title="Print QR code"
+                onClick={() => printQrLabel(qrModalPrintRef, labelConfig || {})}
+                title="Print QR label"
                 style={{
                   background: "transparent",
                   border: "none",
@@ -340,27 +341,29 @@ const QueuePage = () => {
                 <PrintIcon size={20} style={{ color: "var(--text)" }} />
               </button>
             </div>
-            <div ref={qrModalPrintRef} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "none" }}>
+                <QrLabelPrint
+                  ref={qrModalPrintRef}
+                  customerName={qrModalCustomerName}
+                  qrToken={qrModalToken}
+                  labelConfig={labelConfig || {}}
+                />
+              </div>
               <div style={{ background: "#fff", padding: "12px", borderRadius: "8px" }}>
                 <QRCodeSVG value={qrModalToken} size={200} level="M" />
               </div>
-              <div
-                className="token"
-                style={{
-                  fontFamily: "monospace",
-                  fontSize: "13px",
-                  color: "var(--muted)",
-                  wordBreak: "break-all",
-                  marginTop: "8px",
-                }}
-              >
+              <div className="small muted" style={{ fontFamily: "monospace", marginTop: "8px", wordBreak: "break-all" }}>
                 {qrModalToken}
               </div>
             </div>
             <button
               type="button"
               className="btn"
-              onClick={() => setQrModalToken(null)}
+              onClick={() => {
+                setQrModalToken(null);
+                setQrModalCustomerName("");
+              }}
               style={{ marginTop: "8px" }}
             >
               Close

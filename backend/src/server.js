@@ -12,6 +12,7 @@ import dashboardRoutes from "./routes/dashboard.js";
 import usersRoutes from "./routes/users.js";
 import repairCategoriesRoutes from "./routes/repairCategories.js";
 import customersRoutes from "./routes/customers.js";
+import configRoutes from "./routes/config.js";
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/repair-categories", repairCategoriesRoutes);
 app.use("/api/customers", customersRoutes);
+app.use("/api/config", configRoutes);
 
 // In production (e.g. Docker), serve built frontend from ./public (SPA fallback)
 const publicPath = path.join(process.cwd(), "public");

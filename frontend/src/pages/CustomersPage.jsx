@@ -183,6 +183,7 @@ const CustomersPage = () => {
                 <th>Phone</th>
                 <th>Another number</th>
                 <th>Email</th>
+                <th>Address</th>
                 <th style={{ textAlign: "right" }}>Action</th>
               </tr>
             </thead>
@@ -193,6 +194,7 @@ const CustomersPage = () => {
                   <td className="muted small">{c.phone || "—"}</td>
                   <td className="muted small">{c.phone2 || "—"}</td>
                   <td className="muted small">{c.email || "—"}</td>
+                  <td className="muted small">{c.address || "—"}</td>
                   <td style={{ textAlign: "right" }}>
                     <button
                       type="button"
@@ -208,7 +210,7 @@ const CustomersPage = () => {
               {!loading && customers.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     style={{
                       textAlign: "center",
                       padding: "48px 20px",

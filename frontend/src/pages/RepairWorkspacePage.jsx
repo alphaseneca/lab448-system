@@ -5,6 +5,8 @@ import { api } from "../utils/apiClient.js";
 import { REPAIR_STATUS } from "../constants/statuses.js";
 import { useAuth } from "../state/AuthContext.jsx";
 import { PERMISSIONS } from "../constants/permissions.js";
+import QrLabelPrint, { printQrLabel } from "../components/QrLabelPrint.jsx";
+import { getQrLabelConfig } from "../utils/qrLabelConfig.js";
 
 const PrintIcon = ({ size = 20, style = {} }) => (
   <svg
@@ -271,20 +273,11 @@ const RepairWorkspacePage = () => {
   const actionButtonsRef = useRef([]);
 
   const qrPrintRef = useRef(null);
+  const [labelConfig, setLabelConfig] = useState(null);
 
-  const printQrContent = (ref) => {
-    if (!ref?.current) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(
-      `<!DOCTYPE html><html><head><title>QR Code</title><style>body{font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;background:#fff;}.token{font-family:monospace;margin-top:12px;font-size:14px;color:#333;}</style></head><body>${ref.current.innerHTML}</body></html>`,
-    );
-    win.document.close();
-    win.onload = () => {
-      win.print();
-      win.close();
-    };
-  };
+  useEffect(() => {
+    getQrLabelConfig().then(setLabelConfig);
+  }, []);
 
   const load = async () => {
     const res = await api.get(`/repairs/${id}`);
@@ -620,34 +613,21 @@ const RepairWorkspacePage = () => {
             </div>
             <button
               type="button"
-              onClick={() => printQrContent(qrPrintRef)}
-              title="Print QR"
+              onClick={() => printQrLabel(qrPrintRef, labelConfig || {})}
+              title="Print QR label"
               className="btn btn-ghost"
               style={{ padding: "6px" }}
             >
               <PrintIcon size={18} />
             </button>
           </div>
-          <div ref={qrPrintRef} style={{ display: "none" }}>
-            <div
-              style={{
-                background: "#fff",
-                padding: "8px",
-                display: "inline-block",
-              }}
-            >
-              <QRCodeSVG value={repair.qrToken} size={140} level="M" />
-            </div>
-            <span
-              className="small"
-              style={{
-                display: "block",
-                marginTop: "8px",
-                fontFamily: "monospace",
-              }}
-            >
-              {repair.qrToken}
-            </span>
+          <div style={{ display: "none" }}>
+            <QrLabelPrint
+              ref={qrPrintRef}
+              customerName={repair.customer?.name ?? ""}
+              qrToken={repair.qrToken ?? ""}
+              labelConfig={labelConfig || {}}
+            />
           </div>
         </div>
 

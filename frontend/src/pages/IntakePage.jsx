@@ -3,6 +3,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { api } from "../utils/apiClient.js";
 import { validatePhone, validateEmail } from "../utils/validation.js";
 import deviceBrands from "../data/deviceBrands.json";
+import QrLabelPrint, { printQrLabel } from "../components/QrLabelPrint.jsx";
+import { getQrLabelConfig } from "../utils/qrLabelConfig.js";
 
 const CUSTOMER_SEARCH_DEBOUNCE_MS = 300;
 const CUSTOMER_SEARCH_MIN_LEN = 2;
@@ -22,6 +24,7 @@ const IntakePage = () => {
     customerPhone: "",
     customerPhone2: "",
     customerEmail: "",
+    customerAddress: "",
     deviceBrand: "",
     deviceModel: "",
     serialNumber: "",
@@ -44,9 +47,14 @@ const IntakePage = () => {
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
   const [brandDropdownOpen, setBrandDropdownOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [labelConfig, setLabelConfig] = useState(null);
   const intakeQrPrintRef = useRef(null);
   const customerSearchRef = useRef(null);
   const brandInputRef = useRef(null);
+
+  useEffect(() => {
+    getQrLabelConfig().then(setLabelConfig);
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(
@@ -84,6 +92,7 @@ const IntakePage = () => {
       customerPhone: c.phone || "",
       customerPhone2: c.phone2 || "",
       customerEmail: c.email || "",
+      customerAddress: c.address || "",
     }));
     setSelectedCustomerId(c.id);
     setCustomerSearchInput("");
@@ -104,19 +113,6 @@ const IntakePage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const printQrContent = (ref) => {
-    if (!ref?.current) return;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(
-      `<!DOCTYPE html><html><head><title>QR Code</title><style>body{font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;background:#fff;}.token{font-family:monospace;margin-top:12px;font-size:14px;color:#333;}</style></head><body>${ref.current.innerHTML}</body></html>`
-    );
-    win.document.close();
-    win.onload = () => {
-      win.print();
-      win.close();
-    };
-  };
 
   useEffect(() => {
     api
@@ -135,7 +131,7 @@ const IntakePage = () => {
     const v = e.target.value;
     if ((field === "customerPhone" || field === "customerPhone2") && v !== "" && !/^\d*$/.test(v)) return;
     setForm((f) => ({ ...f, [field]: v }));
-    if (["customerName", "customerPhone", "customerPhone2", "customerEmail"].includes(field)) {
+    if (["customerName", "customerPhone", "customerPhone2", "customerEmail", "customerAddress"].includes(field)) {
       setSelectedCustomerId(null);
       setFieldErrors((err) => ({ ...err, [field]: undefined }));
     }
@@ -185,6 +181,7 @@ const IntakePage = () => {
         phone: form.customerPhone || null,
         phone2: form.customerPhone2 || null,
         email: form.customerEmail || null,
+        address: form.customerAddress || null,
       };
       if (selectedCustomerId) customerPayload.id = selectedCustomerId;
 
@@ -207,6 +204,7 @@ const IntakePage = () => {
         customerPhone: "",
         customerPhone2: "",
         customerEmail: "",
+        customerAddress: "",
         deviceBrand: "",
         deviceModel: "",
         serialNumber: "",
@@ -272,8 +270,8 @@ const IntakePage = () => {
                 </h3>
                 <button
                   type="button"
-                  onClick={() => printQrContent(intakeQrPrintRef)}
-                  title="Print QR code"
+                  onClick={() => printQrLabel(intakeQrPrintRef, labelConfig || {})}
+                  title="Print QR label"
                   style={{
                     background: "transparent",
                     border: "none",
@@ -313,13 +311,18 @@ const IntakePage = () => {
                 >
                   {result.repair.qrToken}
                 </div>
-                <div ref={intakeQrPrintRef} style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "12px" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "12px" }}>
                   <div style={{ background: "#fff", padding: "8px", borderRadius: "8px", display: "inline-block" }}>
                     <QRCodeSVG value={result.repair.qrToken} size={140} level="M" />
                   </div>
-                  <span className="token" style={{ marginTop: "8px", fontFamily: "monospace", fontSize: "14px", color: "var(--muted)" }}>
-                    {result.repair.qrToken}
-                  </span>
+                </div>
+                <div style={{ display: "none" }}>
+                  <QrLabelPrint
+                    ref={intakeQrPrintRef}
+                    customerName={result.customer.name}
+                    qrToken={result.repair.qrToken}
+                    labelConfig={labelConfig || {}}
+                  />
                 </div>
                 <p className="small muted" style={{ marginTop: "8px" }}>
                   Attach this QR code to the device for tracking
@@ -402,7 +405,7 @@ const IntakePage = () => {
                       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                     >
                       <div style={{ fontWeight: 500 }}>{c.name}</div>
-                      <div className="small muted">{[c.phone, c.phone2, c.email].filter(Boolean).join(" · ") || "—"}</div>
+                      <div className="small muted">{[c.phone, c.phone2, c.email, c.address].filter(Boolean).join(" · ") || "—"}</div>
                     </li>
                   ))}
                 </ul>
@@ -470,6 +473,18 @@ const IntakePage = () => {
               {fieldErrors.customerEmail && (
                 <div className="small" style={{ color: "#f87171", marginTop: "4px" }}>{fieldErrors.customerEmail}</div>
               )}
+            </div>
+            <div style={{ marginTop: "12px" }}>
+              <label className="small muted" style={{ display: "block", marginBottom: "6px" }}>
+                Address
+              </label>
+              <input
+                type="text"
+                style={{ width: "100%" }}
+                value={form.customerAddress}
+                onChange={update("customerAddress")}
+                placeholder="Street, city, state, PIN"
+              />
             </div>
           </div>
 
