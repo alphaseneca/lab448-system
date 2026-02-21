@@ -6,15 +6,15 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-lab448}
+      POSTGRES_USER: ${POSTGRES_USER:-lab448_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lab448_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-lab448_repair}
-      PGDATA: /var/lib/postgresql/data/pgdata  # Important: explicit PGDATA path
+      POSTGRES_DB: ${POSTGRES_DB:-lab448_database}
+      PGDATA: /var/lib/postgresql/data/pgdata # Important: explicit PGDATA path
     volumes:
       # Direct bind mount to external folder - TRUE persistence
       - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lab448} -d ${POSTGRES_DB:-lab448_repair}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lab448_admin} -d ${POSTGRES_DB:-lab448_database}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,7 +27,7 @@ services:
     ports:
       - "0.0.0.0:${HTTP_PORT:-8080}:4000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-lab448}:${POSTGRES_PASSWORD:-lab448_secret}@postgres:5432/${POSTGRES_DB:-lab448_repair}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lab448_admin}:${POSTGRES_PASSWORD:-lab448_secret}@postgres:5432/${POSTGRES_DB:-lab448_database}?schema=public
       JWT_SECRET: ${JWT_SECRET:-change-this-secret}
       PORT: "4000"
       AAKASH_SMS_AUTH_TOKEN: ${AAKASH_SMS_AUTH_TOKEN:-}

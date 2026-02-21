@@ -1,7 +1,7 @@
 /**
  * Create the first admin user from the command line (same logic as bootstrap-admin API).
  * Run inside the container to see full errors: docker compose exec backend node src/scripts/create-admin.js <email> <password> <name>
- * Example: docker compose exec backend node src/scripts/create-admin.js admin@lab448.com admin123456 Administrator
+ * Example: docker compose exec backend node src/scripts/create-admin.js admin@lab448_admin.com admin123456 Administrator
  */
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
@@ -10,7 +10,7 @@ import db from "../db.js";
 const [email, password, name] = process.argv.slice(2);
 if (!email || !password || !name) {
   console.error("Usage: node src/scripts/create-admin.js <email> <password> <name>");
-  console.error("Example: node src/scripts/create-admin.js admin@lab448.com admin123456 Administrator");
+  console.error("Example: node src/scripts/create-admin.js admin@lab448_admin.com admin123456 Administrator");
   process.exit(1);
 }
 

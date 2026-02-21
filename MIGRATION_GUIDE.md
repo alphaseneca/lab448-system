@@ -157,7 +157,7 @@ where: {
 2. **Configure database:**
    Create `backend/.env`:
    ```
-   DATABASE_URL="postgresql://user:password@localhost:5432/lab448_repair"
+   DATABASE_URL="postgresql://lab448_admin:password@localhost:5432/lab448_database"
    JWT_SECRET="your-strong-secret-here"
    PORT=4000
    ```
@@ -165,7 +165,7 @@ where: {
 3. **Create database:**
    ```bash
    psql -U postgres
-   CREATE DATABASE lab448_repair;
+   CREATE DATABASE lab448_database;
    \q
    ```
 
@@ -207,8 +207,8 @@ Sequelize will detect existing tables and adapt to them.
 
 1. Drop the database:
    ```sql
-   DROP DATABASE lab448_repair;
-   CREATE DATABASE lab448_repair;
+   DROP DATABASE lab448_database;
+   CREATE DATABASE lab448_database;
    ```
 
 2. Run the sync script:

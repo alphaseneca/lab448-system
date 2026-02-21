@@ -54,7 +54,7 @@ npm install
 2. Create `.env` in `backend`:
 
 ```bash
-DATABASE_URL="postgresql://user:password@localhost:5432/lab448_repair"
+DATABASE_URL="postgresql://user:password@localhost:5432/lab448_database"
 JWT_SECRET="change-this-secret"
 PORT=4000
 ```
@@ -230,7 +230,7 @@ This project uses environment variables for sensitive configuration (database UR
 - Backend example: create `backend/.env` with values used by Prisma and the server:
 
 ```env
-DATABASE_URL="postgresql://user:password@localhost:5432/lab448_repair?schema=public"
+DATABASE_URL="postgresql://lab448_admin:password@localhost:5432/lab448_database?schema=public"
 JWT_SECRET="change-this-secret"
 PORT=4000
 ```

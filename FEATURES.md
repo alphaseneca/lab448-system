@@ -244,7 +244,7 @@ npm install
 npm run dev
 
 # Create admin user (PowerShell)
-Invoke-RestMethod -Method Post -Uri "http://localhost:4000/api/auth/bootstrap-admin" -ContentType "application/json" -Body '{"email":"admin@lab448.com","password":"admin123","name":"Admin"}'
+Invoke-RestMethod -Method Post -Uri "http://localhost:4000/api/auth/bootstrap-admin" -ContentType "application/json" -Body '{"email":"admin@lab448_admin.com","password":"admin123","name":"Admin"}'
 ```
 
 Then visit http://localhost:5173 and log in!

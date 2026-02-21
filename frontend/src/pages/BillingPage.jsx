@@ -4,6 +4,7 @@ import { api } from "../utils/apiClient.js";
 import { useAuth } from "../state/AuthContext.jsx";
 import { PERMISSIONS } from "../constants/permissions.js";
 import DarkSelect from "../components/DarkSelect.jsx";
+import { printThermalBill, getNextBillNumber } from "../components/ThermalBillPrint.jsx";
 
 const inputStyle = {
   width: "100%",
@@ -210,14 +211,53 @@ const BillingPage = () => {
             )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(`/repairs/${id}`)}
-          className="btn btn-ghost"
-          style={{ padding: "10px 20px", fontSize: "14px" }}
-        >
-          ← Back to repair dashboard
-        </button>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          {hasDue && (
+            <button
+              type="button"
+              onClick={() => {
+                const pendingItems = (items ?? []).filter((i) => Number(i.due) > 0);
+                const pendingTotal = pendingItems.reduce((s, i) => s + Number(i.due), 0);
+                const groups = pendingItems.map((item, idx) => {
+                  const label = [idx + 1, [item.device?.brand, item.device?.model].filter(Boolean).join(" "), item.qrToken && `(${item.qrToken})`].filter(Boolean).join(" ").trim() || `Repair ${item.repairId}`;
+                  const charges = (item.charges || []).map((c) => ({
+                    description: c.description || "Charge",
+                    amount: Number(c.amount),
+                  }));
+                  if (charges.length === 0) {
+                    charges.push({ description: "Repair / service", amount: Number(item.due) || 0 });
+                  }
+                  return { repairLabel: label, charges };
+                });
+                printThermalBill({
+                  billNumber: getNextBillNumber(),
+                  dateTime: new Date().toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" }),
+                  customer: {
+                    name: customer?.name,
+                    phone: customer?.phone ?? customer?.phone2,
+                    address: customer?.address,
+                  },
+                  groups,
+                  total: pendingTotal,
+                  footerWebsite: import.meta.env.VITE_BILL_FOOTER_WEBSITE ?? "lab448.ukesharyal.com.np",
+                  footerPhone: import.meta.env.VITE_BILL_FOOTER_PHONE ?? "98xxxxxxxx",
+                });
+              }}
+              className="btn"
+              style={{ padding: "10px 20px", fontSize: "14px" }}
+            >
+              🖨️ Print bill
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate(`/repairs/${id}`)}
+            className="btn btn-ghost"
+            style={{ padding: "10px 20px", fontSize: "14px" }}
+          >
+            ← Back to repair dashboard
+          </button>
+        </div>
       </div>
 
       {!canBill && (

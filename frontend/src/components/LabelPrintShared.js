@@ -19,6 +19,9 @@ export const DEFAULT_LABEL_CONFIG = {
   nameFontSizePt: 6,
 };
 
+/** Thermal bill: 80mm width, variable height (roll paper). */
+export const THERMAL_BILL_WIDTH_MM = 80;
+
 /**
  * @param {{ paperWidthMm?: number, paperHeightMm?: number, qrSizeMm?: number }} config
  * @returns {string} CSS for the print document
@@ -104,6 +107,52 @@ export function getBarcodeLabelPrintStyles(config = {}) {
     @media print {
       html, body { margin: 0 !important; padding: 0 !important; width: ${paperWidthMm}mm !important; height: ${paperHeightMm}mm !important; min-width: ${paperWidthMm}mm; min-height: ${paperHeightMm}mm; max-width: ${paperWidthMm}mm; max-height: ${paperHeightMm}mm; overflow: hidden !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .barcode-label-print { width: ${paperWidthMm}mm !important; height: ${paperHeightMm}mm !important; margin: 0 !important; padding: ${pad}mm !important; overflow: hidden !important; }
+    }
+  `;
+}
+
+/**
+ * Styles for 80mm thermal bill (variable height). Same width constraint pattern as QR/Barcode labels.
+ * @returns {string}
+ */
+export function getThermalBillPrintStyles() {
+  const w = THERMAL_BILL_WIDTH_MM;
+  return `
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: ${w}mm; min-width: ${w}mm; max-width: ${w}mm; min-height: 100%; background: #fff; font-family: 'Montserrat', sans-serif; font-size: 10pt; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .thermal-bill { width: ${w}mm; min-width: ${w}mm; max-width: ${w}mm; padding: 4mm 5mm; overflow-wrap: break-word; word-wrap: break-word; }
+    .thermal-bill .bill-header { text-align: center; margin-bottom: 4mm; }
+    .thermal-bill .bill-logo { display: block; margin: 0 auto 3mm; width: 14mm; height: 14mm; object-fit: contain; max-width: 100%; }
+    .thermal-bill .bill-number { font-weight: 700; font-size: 11pt; word-break: break-word; }
+    .thermal-bill .bill-datetime { font-size: 9pt; color: #333; margin-top: 1mm; }
+    .thermal-bill .line-solid { border: none; border-top: 2px solid #000; margin: 4mm 0; }
+    .thermal-bill .line-dashed { border: none; border-top: 1px dashed #333; margin: 4mm 0; }
+    .thermal-bill .customer-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 4mm; font-size: 9pt; margin: 2mm 0; }
+    .thermal-bill .customer-label { font-weight: 700; flex-shrink: 0; }
+    .thermal-bill .customer-value { text-align: right; flex: 1; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
+    .thermal-bill .items-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin: 4mm 0 2mm 0; table-layout: fixed; }
+    .thermal-bill .items-table th { font-weight: 700; font-size: 8pt; padding: 2.5mm 1.5mm 2.5mm 0; border-bottom: 1px solid #000; }
+    .thermal-bill .items-table th.th-sn { width: 10mm; min-width: 10mm; text-align: left; }
+    .thermal-bill .items-table th.th-items { text-align: left; }
+    .thermal-bill .items-table th.th-rate { width: 14mm; min-width: 14mm; text-align: right; padding-right: 0; }
+    .thermal-bill .items-table th.th-amt { width: 14mm; min-width: 14mm; text-align: right; padding-right: 0; }
+    .thermal-bill .items-table td { font-size: 8pt; padding: 2mm 1.5mm 2mm 0; border-bottom: 1px solid #eee; vertical-align: top; }
+    .thermal-bill .items-table td.td-sn { text-align: left; }
+    .thermal-bill .items-table td.td-items { text-align: left; word-break: break-word; overflow-wrap: break-word; max-width: 0; }
+    .thermal-bill .items-table td.td-rate, .thermal-bill .items-table td.td-amt { text-align: right; padding-right: 0; }
+    .thermal-bill .items-table tr.group-header td { font-weight: 700; font-size: 8pt; border-bottom: 1px dashed #333; padding: 3mm 1.5mm 3mm 0; background: #f8f8f8; word-break: break-word; overflow-wrap: break-word; }
+    .thermal-bill .summary-row { display: flex; justify-content: space-between; gap: 4mm; font-size: 9pt; margin: 2mm 0; }
+    .thermal-bill .summary-label { font-weight: 700; flex-shrink: 0; }
+    .thermal-bill .summary-value { text-align: right; flex-shrink: 0; }
+    .thermal-bill .total-row { font-size: 11pt; font-weight: 700; margin-top: 3mm; padding-top: 3mm; border-top: 2px solid #000; }
+    .thermal-bill .bill-footer { text-align: center; margin-top: 6mm; font-size: 9pt; color: #333; word-break: break-word; }
+    .thermal-bill .bill-footer .thanks { margin-bottom: 2mm; }
+    .thermal-bill .bill-footer .footer-phone { margin-bottom: 2mm; }
+    @page { size: ${w}mm auto; margin: 0; }
+    @media print {
+      html, body { margin: 0 !important; padding: 0 !important; width: ${w}mm !important; min-width: ${w}mm !important; max-width: ${w}mm !important; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .thermal-bill { width: ${w}mm !important; min-width: ${w}mm !important; max-width: ${w}mm !important; }
+      .thermal-bill .items-table tr.group-header td { background: #fff !important; }
     }
   `;
 }
