@@ -1,6 +1,9 @@
 // Lab448 Repair Shop - Database Schema (DBML)
-// Version: 5.0
+// Version: 5.3
 // Based on: Db Schema Design.md
+// Changelog v5.1: Added Dynamic QR payment integration
+// Changelog v5.2: Added Subscription Management domain
+// Changelog v5.3: Subscription visit tracking refinements — visit items, on-site repair location, technician visit pay linkage
 
 Project lab448_system {
   database_type: 'PostgreSQL'
@@ -50,6 +53,10 @@ Table staff_members {
   commission_rate decimal(5,4) [note: 'Live rate; historical rate frozen per work log']
   technician_rank varchar [note: 'JUNIOR / SENIOR / EXPERT / MASTER']
   technician_rank_label varchar [note: 'Display label: Repair Sergeant']
+  // Real-time location — updated by mobile app (logistics/rider staff)
+  last_known_lat decimal(10,8) [note: 'Last reported GPS latitude — updated by rider app']
+  last_known_lng decimal(11,8) [note: 'Last reported GPS longitude — updated by rider app']
+  last_location_at timestamptz [note: 'When the last location ping was received']
   last_login_at timestamptz
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
@@ -61,7 +68,10 @@ Table staff_members {
 
 Table customers {
   id varchar [pk, note: 'CUID2']
-  name varchar [not null]
+  name varchar [not null, note: 'Full name (individual) or business name (company)']
+  is_company boolean [not null, default: false, note: 'false = individual, true = company/business']
+  company_contact_person varchar [note: 'Primary contact person at the company — only set when is_company = true']
+  pan_number varchar [note: 'Company PAN for VAT invoicing — only set when is_company = true']
   phone_primary varchar
   phone_secondary varchar
   email varchar
@@ -126,6 +136,7 @@ Table customer_devices {
   updated_at timestamptz [not null]
 
   Note: 'Physical device owner. Media (intake photos, damage) linked via media_attachments: entity_type=customer_device'
+  deleted_at timestamptz
 }
 
 // =============================================================================
@@ -152,6 +163,7 @@ Table repair_orders {
   id varchar [pk, note: 'CUID2']
   ticket_number varchar [unique, not null, note: 'LAB260222-0001']
   customer_id varchar [not null, ref: > customers.id]
+  created_by_id varchar [not null, ref: > staff_members.id, note: 'Staff who opened this repair ticket']
   device_id varchar [not null, ref: > customer_devices.id]
   assigned_to_id varchar [ref: > staff_members.id]
   service_type_id varchar [ref: > repair_service_types.id]
@@ -177,6 +189,16 @@ Table repair_orders {
   delivered_at timestamptz
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
+
+  // Subscription linkage (null for non-subscription repairs)
+  subscription_id varchar [ref: > customer_subscriptions.id, note: 'Set if this repair is part of a subscription contract']
+  subscription_visit_id varchar [ref: > subscription_visit_logs.id, note: 'Which subscription visit log this repair was created from']
+  repair_location varchar [not null, default: 'SHOP', note: 'SHOP = device brought to LAB448. ON_SITE = repaired at the company premises during a subscription visit.']
+
+  // Logistics — pickup / delivery assignment and device whereabouts
+  pickup_assigned_to_id varchar [ref: > staff_members.id, note: 'Staff assigned to collect the device']
+  delivery_assigned_to_id varchar [ref: > staff_members.id, note: 'Staff assigned to return the device after repair']
+  device_location varchar [note: 'AT_CUSTOMER / IN_TRANSIT_TO_SHOP / AT_SHOP / IN_TRANSIT_TO_CUSTOMER / DELIVERED']
 }
 
 Table repair_status_logs {
@@ -201,6 +223,7 @@ Table technician_work_logs {
   commission_amount decimal(10,2)
   is_approved boolean [not null, default: false]
   approved_by_id varchar [ref: > staff_members.id]
+  subscription_visit_id varchar [ref: > subscription_visit_logs.id, note: 'Set when work was done during a subscription site visit — used for visit-based salary calculation']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 }
@@ -228,6 +251,11 @@ Table invoices {
   due_at timestamptz
   is_locked boolean [not null, default: false]
   created_by_id varchar [not null, ref: > staff_members.id]
+
+  // Subscription linkage (null for regular invoices)
+  invoice_type varchar [not null, default: 'REPAIR', note: 'REPAIR / SUBSCRIPTION_FEE']
+  subscription_id varchar [ref: > customer_subscriptions.id, note: 'On SUBSCRIPTION_FEE invoices: which contract is being billed. On REPAIR invoices: which subscription covers it (null if none).']
+
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 }
@@ -264,12 +292,29 @@ Table payments {
   id varchar [pk, note: 'CUID2']
   invoice_id varchar [not null, ref: > invoices.id]
   amount decimal(10,2) [not null]
-  payment_method varchar [not null]
-  reference_number varchar
+  payment_method varchar [not null, note: 'CASH / CARD / BANK_TRANSFER / DIGITAL_WALLET / DYNAMIC_QR / CHEQUE / OTHER']
+  reference_number varchar [note: 'Bank txn ref, eSewa/Khalti code, cheque number, or qr_reference_id for DYNAMIC_QR']
   received_by_id varchar [not null, ref: > staff_members.id]
   payment_note text
+
+  // Dynamic QR fields — null for all non-QR payment methods
+  qr_provider varchar [note: 'FONEPAY / ESEWA / KHALTI / IME_PAY / CONNECTIPS — which QR network']
+  qr_reference_id varchar [unique, note: 'Our internal merchant/PRN reference sent to the provider — used to match callbacks']
+  qr_provider_txn_id varchar [note: 'Transaction ID assigned by the provider (arrives in callback)']
+  qr_payload text [note: 'Raw QR string / QRIS data encoded into the on-screen QR image']
+  qr_deeplink_url text [note: 'App deep-link for tap-to-pay on mobile: fonepay://... / pay.esewa.com/...']
+  qr_image_url text [note: 'URL of the pre-rendered QR image (S3/local) shown on POS screen']
+  qr_status varchar [note: 'QR_GENERATED → QR_SCANNED → PAID / EXPIRED / FAILED / CANCELLED']
+  qr_expires_at timestamptz [note: 'When the QR code expires (from provider response or configured TTL)']
+  qr_scanned_at timestamptz [note: 'When provider sent the intermediate scan event']
+  qr_verified_at timestamptz [note: 'When provider confirmed payment received']
+  qr_last_polled_at timestamptz [note: 'Last poll time for polling-based providers only — Fonepay delivers status via WebSocket push and does not need this']
+  qr_raw_response jsonb [note: 'Full raw JSON from QR generation API call']
+  qr_raw_callback jsonb [note: 'Full raw JSON callback/webhook body from provider on payment confirmation']
+
   received_at timestamptz [not null]
   created_at timestamptz [not null]
+  updated_at timestamptz [not null]
 }
 
 // =============================================================================
@@ -423,6 +468,7 @@ Table communication_logs {
   whatsapp_conversation_id varchar [ref: > whatsapp_conversations.id]
   channel varchar [not null]
   direction varchar [not null]
+  sent_by_id varchar [ref: > staff_members.id, note: 'Staff who sent the message — null for system-automated outbound']
   event_type varchar
   recipient_or_sender varchar [not null]
   message_body text [not null]
@@ -457,4 +503,94 @@ Table audit_events {
   after_snapshot jsonb
   ip_address varchar
   created_at timestamptz [not null]
+}
+
+// =============================================================================
+// DOMAIN 10 — SUBSCRIPTIONS
+// =============================================================================
+
+Table subscription_plans {
+  id varchar [pk, note: 'CUID2']
+  code varchar [unique, not null, note: 'BASIC / STANDARD / PREMIUM']
+  name varchar [not null]
+  description text
+  billing_cycle varchar [not null, note: 'ANNUAL / SEMI_ANNUAL / QUARTERLY']
+  price decimal(10,2) [not null]
+  visit_frequency varchar [not null, note: 'MONTHLY / QUARTERLY / AS_NEEDED — how often visits are scheduled']
+  max_visits_per_cycle integer [note: 'Visit allowance per billing cycle — null = unlimited']
+  desk_charge_waived boolean [not null, default: true, note: 'Call-out / desk fee is always waived for subscribed customers']
+  basic_repair_coverage_amount decimal(10,2) [note: 'If repair issue is general/basic, costs up to this amount are not charged — null = not yet determined']
+  coverage_notes text [note: 'Free text for any additional plan-specific coverage details']
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table customer_subscriptions {
+  id varchar [pk, note: 'CUID2']
+  customer_id varchar [not null, ref: > customers.id, note: 'Must be a company customer (is_company = true)']
+  plan_id varchar [not null, ref: > subscription_plans.id]
+  status varchar [not null, default: 'ACTIVE', note: 'ACTIVE / EXPIRED / CANCELLED / PENDING']
+  cycle_start_at timestamptz [not null]
+  cycle_end_at timestamptz [not null]
+  next_visit_due_at timestamptz [note: 'When the next visit should be scheduled']
+  auto_renew boolean [not null, default: true]
+  subscribed_by_id varchar [not null, ref: > staff_members.id, note: 'Staff who enrolled this customer']
+  cancelled_by_id varchar [ref: > staff_members.id]
+  cancellation_reason text
+  renewed_from_id varchar [ref: > customer_subscriptions.id, note: 'Previous subscription cycle this was renewed from — null for first-time subscription']
+  notes text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table subscription_visit_logs {
+  id varchar [pk, note: 'CUID2']
+  subscription_id varchar [not null, ref: > customer_subscriptions.id]
+  visit_address_id varchar [ref: > customer_addresses.id, note: 'Which company address was visited']
+  scheduled_at timestamptz [not null, note: 'When the visit was planned']
+  visited_at timestamptz [note: 'When the technician(s) actually arrived on site']
+  visit_notes text [note: 'General observations and summary of the visit']
+  status varchar [not null, default: 'SCHEDULED', note: 'SCHEDULED / IN_PROGRESS / COMPLETED / MISSED / CANCELLED']
+  created_by_id varchar [not null, ref: > staff_members.id, note: 'Staff who scheduled the visit']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table subscription_visit_staff {
+  visit_id varchar [not null, ref: > subscription_visit_logs.id]
+  technician_id varchar [not null, ref: > staff_members.id]
+  role varchar [not null, default: 'ASSISTANT', note: 'LEAD / ASSISTANT — one lead per visit, rest are assistants']
+  created_at timestamptz [not null]
+
+  indexes {
+    (visit_id, technician_id) [pk]
+  }
+}
+
+Table subscription_visit_findings {
+  id varchar [pk, note: 'CUID2']
+  visit_id varchar [not null, ref: > subscription_visit_logs.id, note: 'Which visit log this finding was recorded during']
+  logged_by_id varchar [not null, ref: > staff_members.id, note: 'Technician who logged this finding on-site']
+
+  // Device identification
+  customer_device_id varchar [ref: > customer_devices.id, note: 'Linked to a registered device if already in the system']
+  device_type_id varchar [ref: > repair_device_types.id, note: 'Category of the device being inspected (e.g. Smartphone, Laptop)']
+  device_description varchar [note: 'Free-text if device not yet registered — brand, model, serial number']
+
+  reported_issue text [note: 'What the company contact says is wrong']
+  technician_observation text [note: 'What the technician observed on inspection']
+
+  action varchar [not null, note: 'INSPECTED_OK / REPAIRED_ON_SITE / TAKEN_TO_SHOP / MONITORING / DEFERRED']
+  // INSPECTED_OK   = checked, no issue or minor wear, no repair needed
+  // REPAIRED_ON_SITE = fixed at company premises during this visit
+  // TAKEN_TO_SHOP  = device collected, brought to LAB448 workshop
+  // MONITORING     = issue noted, watch at next visit
+  // DEFERRED       = repair needed but postponed, customer to confirm
+
+  repair_order_id varchar [ref: > repair_orders.id, note: 'Set once a repair_order is raised (REPAIRED_ON_SITE or TAKEN_TO_SHOP)']
+  notes text
+  // Photos/media: attach via media_attachments (entity_type = 'visit_finding', entity_id = this id)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
 }

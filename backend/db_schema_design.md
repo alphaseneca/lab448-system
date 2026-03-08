@@ -1,7 +1,7 @@
 # Database Schema Design — Repair Management System
 > **Project:** lab448 / Repair Shop Platform  
 > **DB:** PostgreSQL  
-> **Version:** 5.0
+> **Version:** 5.3 — Subscription Visit Tracking Refinements
 
 ---
 
@@ -100,6 +100,17 @@ erDiagram
   repair_orders ||--o{ communication_logs : "triggers"
   customers ||--o{ whatsapp_conversations : "has"
   whatsapp_conversations ||--o{ communication_logs : "messages"
+
+  subscription_plans ||--o{ customer_subscriptions : "subscribed to"
+  customers ||--o{ customer_subscriptions : "has"
+  customer_subscriptions ||--o{ subscription_visit_logs : "visits"
+  subscription_visit_logs ||--o{ subscription_visit_staff : "staffed by"
+  staff_members ||--o{ subscription_visit_staff : "attends"
+  customer_subscriptions ||--o{ repair_orders : "covers"
+  subscription_visit_logs ||--o{ repair_orders : "generates"
+  subscription_visit_logs ||--o{ subscription_visit_findings : "inspects"
+  subscription_visit_findings ||--o| repair_orders : "becomes"
+  customer_subscriptions ||--o{ invoices : "billed via"
 ```
 
 ---
@@ -164,6 +175,9 @@ Every internal person who logs into the system.
 | `commission_rate` | `decimal(5,4)` | nullable | e.g. `0.35` = 35% share. Technicians only. This is the **live** rate; historical rate is frozen per work log. |
 | `technician_rank` | `varchar(20)` | nullable, CHECK | `JUNIOR` / `SENIOR` / `EXPERT` / `MASTER` |
 | `technician_rank_label` | `varchar(100)` | nullable | Display label: "Repair Sergeant" |
+| `last_known_lat` | `decimal(10,8)` | nullable | Last reported GPS latitude — updated by the rider's mobile app |
+| `last_known_lng` | `decimal(11,8)` | nullable | Last reported GPS longitude — updated by the rider's mobile app |
+| `last_location_at` | `timestamptz` | nullable | When the last location ping was received — use to detect stale locations |
 | `last_login_at` | `timestamptz` | nullable | Security hygiene |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
@@ -177,7 +191,10 @@ Every internal person who logs into the system.
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
 | `id` | `varchar` | PK, CUID2 | |
-| `name` | `varchar(200)` | NOT NULL | Full name or business name |
+| `name` | `varchar(200)` | NOT NULL | Full name (individual) or business/company name |
+| `is_company` | `boolean` | NOT NULL, default `false` | `false` = individual customer, `true` = company or business |
+| `company_contact_person` | `varchar(150)` | nullable | Primary contact person at the company — only set when `is_company = true` |
+| `pan_number` | `varchar(20)` | nullable | Company PAN for VAT invoicing — only set when `is_company = true` |
 | `phone_primary` | `varchar(20)` | nullable | Main contact |
 | `phone_secondary` | `varchar(20)` | nullable | Alternate contact |
 | `email` | `varchar(255)` | nullable | For receipts / follow-ups |
@@ -187,6 +204,8 @@ Every internal person who logs into the system.
 | `deleted_at` | `timestamptz` | nullable | Soft-delete: null = active |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
+
+> When `is_company = true`, the UI should show extra fields for `company_contact_person` and `pan_number`. Individual customers leave both null. The `pan_number` prints on VAT invoices for B2B billing.
 
 > Physical addresses (including GPS coordinates for delivery/pickup) are stored in `customer_addresses` below — one customer can have multiple saved locations.
 
@@ -268,6 +287,7 @@ A physical device owned by a customer, brought in for repair.
 | `purchase_year` | `smallint` | nullable | Rough device age — useful context for technician |
 | `has_warranty` | `boolean` | NOT NULL, default `false` | Still under manufacturer warranty? |
 | `reported_issue` | `text` | nullable | What the customer says is wrong at intake |
+| `deleted_at` | `timestamptz` | nullable | Soft delete — same pattern as `customers` |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
 
@@ -308,6 +328,7 @@ The central operational record for each device submitted for repair, whether it 
 | `id` | `varchar` | PK, CUID2 | |
 | `ticket_number` | `varchar(20)` | UNIQUE, NOT NULL | Human-readable ID and QR value: `LAB260222-0001` |
 | `customer_id` | `varchar` | FK → `customers.id`, NOT NULL | Who submitted the device |
+| `created_by_id` | `varchar` | FK → `staff_members.id`, NOT NULL | Staff who opened this repair ticket |
 | `device_id` | `varchar` | FK → `customer_devices.id`, NOT NULL | Which device |
 | `assigned_to_id` | `varchar` | FK → `staff_members.id`, nullable | **Currently responsible technician.** Set when status moves to `QUEUED`. See business rule below. |
 | `service_type_id` | `varchar` | FK → `repair_service_types.id`, nullable | Type of repair |
@@ -331,6 +352,14 @@ The central operational record for each device submitted for repair, whether it 
 | `in_progress_at` | `timestamptz` | nullable | When technician started work |
 | `completed_at` | `timestamptz` | nullable | When repair was marked done |
 | `delivered_at` | `timestamptz` | nullable | When device was returned to customer |
+| `subscription_id` | `varchar` | FK → `customer_subscriptions.id`, nullable | Set if this repair is part of a subscription contract |
+| `subscription_visit_id` | `varchar` | FK → `subscription_visit_logs.id`, nullable | Which subscription visit log this repair was created from |
+| `repair_location` | `varchar(20)` | NOT NULL, default `SHOP` | `SHOP` = device brought to LAB448 workshop. `ON_SITE` = repaired at the company's premises during a subscription visit. |
+| `pickup_assigned_to_id` | `varchar` | FK → `staff_members.id`, nullable | Staff assigned to collect the device from the customer |
+| `delivery_assigned_to_id` | `varchar` | FK → `staff_members.id`, nullable | Staff assigned to return the device after repair |
+| `device_location` | `varchar(30)` | nullable | `AT_CUSTOMER` → `IN_TRANSIT_TO_SHOP` → `AT_SHOP` → `IN_TRANSIT_TO_CUSTOMER` → `DELIVERED` |
+
+> **Logistics salary traceability:** Count deliveries/pickups per rider by querying `repair_orders WHERE delivery_assigned_to_id = ? AND device_location = 'DELIVERED' AND delivered_at BETWEEN ? AND ?`. No extra table needed — `device_location` + the existing `delivered_at` timestamp are the completion signals.
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
 
@@ -374,10 +403,13 @@ Records every work session by a technician on a repair order. This is the source
 | `commission_amount` | `decimal(10,2)` | nullable | Calculated pay for this session |
 | `is_approved` | `boolean` | NOT NULL, default `false` | Manager must approve before payout |
 | `approved_by_id` | `varchar` | FK → `staff_members.id`, nullable | Manager who approved |
+| `subscription_visit_id` | `varchar` | FK → `subscription_visit_logs.id`, nullable | Set when this work session was performed during a subscription site visit — used to calculate visit-based pay alongside commission |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
 
 > `commission_rate_at_use` replaces `commission_rate_snapshot` — the `_at_use` suffix is consistent with the project-wide convention for historical values (same as `unit_price_at_use` in parts).
+
+> **Visit-based salary:** Repair commission from `technician_work_logs` rows where `subscription_visit_id` is set gives all visit work. A flat visit allowance can be added to `subscription_visit_staff` when that pay policy is decided.
 
 ---
 
@@ -408,6 +440,8 @@ The printable invoice handed to the customer. Links to the customer, not a singl
 | `issued_at` | `timestamptz` | nullable | When invoice was presented to customer |
 | `due_at` | `timestamptz` | nullable | Payment deadline |
 | `is_locked` | `boolean` | NOT NULL, default `false` | Locked when fully paid |
+| `invoice_type` | `varchar(20)` | NOT NULL, default `REPAIR` | `REPAIR` = standard repair invoice. `SUBSCRIPTION_FEE` = periodic subscription billing invoice. |
+| `subscription_id` | `varchar` | FK → `customer_subscriptions.id`, nullable | On `SUBSCRIPTION_FEE` invoices: which contract is being billed. On `REPAIR` invoices: which active subscription covers this repair (null if none). |
 | `created_by_id` | `varchar` | FK → `staff_members.id`, NOT NULL | Who created the invoice |
 | `created_at` | `timestamptz` | NOT NULL | |
 | `updated_at` | `timestamptz` | NOT NULL | |
@@ -468,19 +502,37 @@ invoices.total_amount    = subtotal − discount_amount + tax_amount  ← single
 
 ### `payments`
 
-Money received against an invoice.
+Money received against an invoice. Works for every payment method — Cash, Card, Bank Transfer, Digital Wallet, Dynamic QR, Cheque. Non-QR payments leave all `qr_*` columns null.
 
 | Column | Type | Constraints | Purpose |
 |---|---|---|---|
 | `id` | `varchar` | PK, CUID2 | |
 | `invoice_id` | `varchar` | FK → `invoices.id`, NOT NULL | Which invoice this payment is against |
-| `amount` | `decimal(10,2)` | NOT NULL | Amount received |
-| `payment_method` | `varchar(30)` | NOT NULL, CHECK | `CASH` / `CARD` / `BANK_TRANSFER` / `DIGITAL_WALLET` / `CHEQUE` / `OTHER` |
-| `reference_number` | `varchar(100)` | nullable | Bank txn ref, eSewa/Khalti code, cheque number |
+| `amount` | `decimal(10,2)` | NOT NULL | Gross amount tendered |
+| `payment_method` | `varchar(30)` | NOT NULL, CHECK | `CASH` / `CARD` / `BANK_TRANSFER` / `DIGITAL_WALLET` / `DYNAMIC_QR` / `CHEQUE` / `OTHER` |
+| `reference_number` | `varchar(100)` | nullable | Bank txn ref, eSewa/Khalti code, cheque number — or `qr_reference_id` value for DYNAMIC_QR |
 | `received_by_id` | `varchar` | FK → `staff_members.id`, NOT NULL | Who collected the money |
 | `payment_note` | `text` | nullable | e.g., "Partial — balance on delivery" |
-| `received_at` | `timestamptz` | NOT NULL | When money was received |
+| `qr_provider` | `varchar(30)` | nullable | **DYNAMIC_QR only.** Which QR network: `FONEPAY` / `ESEWA` / `KHALTI` / `IME_PAY` / `CONNECTIPS` |
+| `qr_reference_id` | `varchar(100)` | UNIQUE, nullable | **DYNAMIC_QR only.** Our internal merchant/PRN reference sent to provider — used to match their callback back to this row |
+| `qr_provider_txn_id` | `varchar(100)` | nullable | **DYNAMIC_QR only.** Transaction ID assigned by the provider (arrives in callback) |
+| `qr_payload` | `text` | nullable | **DYNAMIC_QR only.** Raw QR string / QRIS data encoded into the on-screen QR image |
+| `qr_deeplink_url` | `text` | nullable | **DYNAMIC_QR only.** App deep-link for tap-to-pay on mobile: `fonepay://...`, `pay.esewa.com/...` |
+| `qr_image_url` | `text` | nullable | **DYNAMIC_QR only.** URL of the pre-rendered QR image (S3/local) displayed on POS screen |
+| `qr_status` | `varchar(20)` | nullable | **DYNAMIC_QR only.** QR lifecycle: `QR_GENERATED` → `QR_SCANNED` → `PAID` / `EXPIRED` / `FAILED` / `CANCELLED` |
+| `qr_expires_at` | `timestamptz` | nullable | **DYNAMIC_QR only.** When the QR code expires (from provider response or configured TTL) |
+| `qr_scanned_at` | `timestamptz` | nullable | **DYNAMIC_QR only.** When provider sent the intermediate scan event |
+| `qr_verified_at` | `timestamptz` | nullable | **DYNAMIC_QR only.** When provider confirmed payment received |
+| `qr_last_polled_at` | `timestamptz` | nullable | **DYNAMIC_QR only.** Last poll time — only relevant for polling-based providers. Fonepay delivers status updates via **WebSocket push** and does not use this field. |
+| `qr_raw_response` | `jsonb` | nullable | **DYNAMIC_QR only.** Full raw JSON from QR generation API call |
+| `qr_raw_callback` | `jsonb` | nullable | **DYNAMIC_QR only.** Full raw JSON callback/webhook body from provider on payment confirmation |
+| `received_at` | `timestamptz` | NOT NULL | When money was received (for DYNAMIC_QR, set to `qr_verified_at`) |
 | `created_at` | `timestamptz` | NOT NULL | |
+| `updated_at` | `timestamptz` | NOT NULL | |
+
+> **QR status lifecycle:** `QR_GENERATED` — QR image shown on screen. `QR_SCANNED` — customer scanned (provider intermediate event). `PAID` — payment confirmed by provider. `EXPIRED` — TTL passed without scan. `FAILED` — provider error. `CANCELLED` — staff cancelled.
+
+> **Fonepay note:** Fonepay pushes QR status updates over **WebSocket** — the POS screen listens on a socket and updates `qr_status` in real time without polling. Other providers may use HTTP callbacks or polling instead, in which case `qr_last_polled_at` is relevant.
 
 ---
 
@@ -697,6 +749,7 @@ Every message — inbound or outbound — across all channels: SMS, WhatsApp, Em
 | `whatsapp_conversation_id` | `varchar` | FK → `whatsapp_conversations.id`, nullable | The WhatsApp thread this message belongs to |
 | `channel` | `varchar(20)` | NOT NULL, CHECK | `SMS` / `WHATSAPP` / `EMAIL` / `PUSH` |
 | `direction` | `varchar(10)` | NOT NULL, CHECK | `OUTBOUND` (system → customer) / `INBOUND` (customer → system) |
+| `sent_by_id` | `varchar` | FK → `staff_members.id`, nullable | Staff who sent the message — null for automated/system outbound |
 | `event_type` | `varchar(50)` | nullable | For outbound system messages: `REPAIR_INTAKE` / `REPAIR_COMPLETED` / `PAYMENT_RECEIVED` / `ORDER_CONFIRMED`. Null for freeform inbound. |
 | `recipient_or_sender` | `varchar(255)` | NOT NULL | Phone/email/WA number of the other party |
 | `message_body` | `text` | NOT NULL | Full message content |
@@ -748,6 +801,131 @@ Append-only log of significant actions in the system.
 
 ---
 
+## Domain 10 — Subscriptions
+
+> Service contracts for company customers. The shop sends technicians on a scheduled visit cadence. The plan tier determines what charges are waived. Coverage rules beyond desk-charge waiver are not yet finalised — schema is built to accommodate them when decided.
+
+### `subscription_plans`
+
+The catalogue of available subscription tiers.
+
+| Column | Type | Constraints | Purpose |
+|---|---|---|---|
+| `id` | `varchar` | PK, CUID2 | |
+| `code` | `varchar(30)` | UNIQUE, NOT NULL | Machine key: `BASIC`, `STANDARD`, `PREMIUM` |
+| `name` | `varchar(100)` | NOT NULL | Display name |
+| `description` | `text` | nullable | Full plan description for sales/docs |
+| `billing_cycle` | `varchar(20)` | NOT NULL | `ANNUAL` / `SEMI_ANNUAL` / `QUARTERLY` |
+| `price` | `decimal(10,2)` | NOT NULL | Fee charged per billing cycle |
+| `visit_frequency` | `varchar(20)` | NOT NULL | How often visits are scheduled: `MONTHLY` / `QUARTERLY` / `AS_NEEDED` |
+| `max_visits_per_cycle` | `integer` | nullable | Visit allowance per cycle — null = unlimited |
+| `desk_charge_waived` | `boolean` | NOT NULL, default `true` | The call-out / desk fee is waived for all subscribed customers |
+| `basic_repair_coverage_amount` | `decimal(10,2)` | nullable | If repair issue is general/basic, costs up to this amount are not charged to the customer — null = not yet determined |
+| `coverage_notes` | `text` | nullable | Free text for any additional plan-specific coverage rules |
+| `is_active` | `boolean` | NOT NULL, default `true` | Whether new subscriptions can be enrolled on this plan |
+| `created_at` | `timestamptz` | NOT NULL | |
+| `updated_at` | `timestamptz` | NOT NULL | |
+
+---
+
+### `customer_subscriptions`
+
+One row per active or historical subscription contract for a company customer.
+
+| Column | Type | Constraints | Purpose |
+|---|---|---|---|
+| `id` | `varchar` | PK, CUID2 | |
+| `customer_id` | `varchar` | FK → `customers.id`, NOT NULL | Must be a company customer (`is_company = true`) |
+| `plan_id` | `varchar` | FK → `subscription_plans.id`, NOT NULL | Which plan tier |
+| `status` | `varchar(20)` | NOT NULL, default `ACTIVE` | `ACTIVE` / `EXPIRED` / `CANCELLED` / `PENDING` |
+| `cycle_start_at` | `timestamptz` | NOT NULL | Start of current billing period |
+| `cycle_end_at` | `timestamptz` | NOT NULL | End of current billing period |
+| `next_visit_due_at` | `timestamptz` | nullable | When the next visit should be scheduled |
+| `auto_renew` | `boolean` | NOT NULL, default `true` | Auto-renew at cycle end |
+| `subscribed_by_id` | `varchar` | FK → `staff_members.id`, NOT NULL | Staff who enrolled this customer |
+| `cancelled_by_id` | `varchar` | FK → `staff_members.id`, nullable | Staff who cancelled (audit) |
+| `cancellation_reason` | `text` | nullable | Why it was cancelled |
+| `renewed_from_id` | `varchar` | FK → `customer_subscriptions.id`, nullable | Previous subscription cycle this was renewed from — null on first subscription |
+| `notes` | `text` | nullable | |
+| `created_at` | `timestamptz` | NOT NULL | |
+| `updated_at` | `timestamptz` | NOT NULL | |
+
+> Visit count for this cycle is derived live: `COUNT(subscription_visit_logs) WHERE status = COMPLETED AND visited_at BETWEEN cycle_start_at AND cycle_end_at` — no denormalised counter needed.
+
+---
+
+### `subscription_visit_logs`
+
+One row per scheduled or completed technician visit under a subscription. This is the primary tracking record: who went, when, what was found, what repairs resulted.
+
+| Column | Type | Constraints | Purpose |
+|---|---|---|---|
+| `id` | `varchar` | PK, CUID2 | |
+| `subscription_id` | `varchar` | FK → `customer_subscriptions.id`, NOT NULL | Which subscription this visit is under |
+| `visit_address_id` | `varchar` | FK → `customer_addresses.id`, nullable | Which company address was visited |
+| `scheduled_at` | `timestamptz` | NOT NULL | When the visit was planned |
+| `visited_at` | `timestamptz` | nullable | When the technician(s) actually arrived on site |
+| `visit_notes` | `text` | nullable | Findings, reported issues, general observations during the visit |
+| `status` | `varchar(20)` | NOT NULL, default `SCHEDULED` | `SCHEDULED` → `IN_PROGRESS` → `COMPLETED` / `MISSED` / `CANCELLED` |
+| `created_by_id` | `varchar` | FK → `staff_members.id`, NOT NULL | Staff who scheduled this visit |
+| `created_at` | `timestamptz` | NOT NULL | |
+| `updated_at` | `timestamptz` | NOT NULL | |
+
+> Repair orders created during the visit are linked via `repair_orders.subscription_visit_id`. All devices collected at the visit are traceable from one `subscription_visit_logs` row.
+
+---
+
+### `subscription_visit_staff`
+
+Junction table — which technicians attended a given visit. Supports multiple technicians per visit.
+
+| Column | Type | Constraints | Purpose |
+|---|---|---|---|
+| `visit_id` | `varchar` | FK → `subscription_visit_logs.id`, NOT NULL | |
+| `technician_id` | `varchar` | FK → `staff_members.id`, NOT NULL | |
+| `role` | `varchar(20)` | NOT NULL, default `ASSISTANT` | `LEAD` = primary responsible technician / `ASSISTANT` = supporting |
+| `created_at` | `timestamptz` | NOT NULL | |
+
+> Composite PK: `(visit_id, technician_id)`.
+
+---
+
+### `subscription_visit_findings`
+
+Structured inspection log — one row per device checked during a visit.
+
+| Column | Type | Constraints | Purpose |
+|---|---|---|---|
+| `id` | `varchar` | PK, CUID2 | |
+| `visit_id` | `varchar` | FK → `subscription_visit_logs.id`, NOT NULL | Which visit log this finding was recorded in |
+| `logged_by_id` | `varchar` | FK → `staff_members.id`, NOT NULL | Technician who logged this finding on-site |
+| `customer_device_id` | `varchar` | FK → `customer_devices.id`, nullable | Linked to existing registered device if already in the system |
+| `device_type_id` | `varchar` | FK → `repair_device_types.id`, nullable | Category of device being inspected: Smartphone, Laptop, etc. |
+| `device_description` | `varchar(255)` | nullable | Free-text if device not yet registered — brand, model, serial |
+| `reported_issue` | `text` | nullable | What the company contact reports is wrong |
+| `technician_observation` | `text` | nullable | What the technician observed on inspection |
+| `action` | `varchar(20)` | NOT NULL | Outcome — see table below |
+| `repair_order_id` | `varchar` | FK → `repair_orders.id`, nullable | Set once a repair order is raised from this finding |
+| `notes` | `text` | nullable | |
+| `created_at` | `timestamptz` | NOT NULL | |
+| `updated_at` | `timestamptz` | NOT NULL | |
+
+**`action` values:**
+
+| Value | Meaning |
+|---|---|
+| `INSPECTED_OK` | Checked, no issue or only minor wear — no repair needed |
+| `REPAIRED_ON_SITE` | Fixed at company premises. `repair_order` created with `repair_location = ON_SITE`. |
+| `TAKEN_TO_SHOP` | Device collected and brought to LAB448. `repair_order` created with `repair_location = SHOP`. |
+| `MONITORING` | Issue noted but not yet actionable — watch at next visit |
+| `DEFERRED` | Repair postponed — customer to confirm |
+
+> **Media / photos:** Attach images via `media_attachments` with `entity_type = 'visit_finding'` and `entity_id = <finding id>`. No separate URL column needed.
+
+> **On-site billing:** Desk charge = NPR 0 (subscription waives it). Parts and labour billed normally via `repair_parts_used → invoice_items` unless plan coverage applies.
+
+---
+
 ## Complete Table List
 
 | # | Domain | Table | From (old name) |
@@ -781,6 +959,11 @@ Append-only log of significant actions in the system.
 | 27 | Comms | `communication_logs` | `notification_logs` |
 | 28 | System | `ref_counters` | `qr_daily_sequences` |
 | 29 | System | `audit_events` | `audit_logs` |
+| 30 | Subscriptions | `subscription_plans` | **NEW** |
+| 31 | Subscriptions | `customer_subscriptions` | **NEW** |
+| 32 | Subscriptions | `subscription_visit_logs` | **NEW** |
+| 33 | Subscriptions | `subscription_visit_staff` | **NEW** |
+| 34 | Subscriptions | `subscription_visit_findings` | **NEW** |
 
 ---
 
@@ -803,6 +986,8 @@ CREATE INDEX ON repair_orders (ticket_number);
 
 -- Invoicing
 CREATE INDEX ON invoices (customer_id, status);
+CREATE INDEX ON payments (invoice_id);
+CREATE INDEX ON payments (qr_reference_id);  -- fast callback lookup by QR reference
 CREATE INDEX ON invoice_items (invoice_id, repair_order_id);
 
 -- Inventory
@@ -819,4 +1004,13 @@ CREATE INDEX ON media_attachments (entity_type, entity_id);
 -- Communications
 CREATE INDEX ON communication_logs (customer_id, channel);
 CREATE INDEX ON whatsapp_conversations (wa_phone_number);
+
+-- Subscriptions
+CREATE INDEX ON customer_subscriptions (customer_id, status);
+CREATE INDEX ON subscription_visit_logs (subscription_id, status);
+CREATE INDEX ON subscription_visit_logs (scheduled_at);
+CREATE INDEX ON subscription_visit_findings (visit_id);
+CREATE INDEX ON subscription_visit_findings (repair_order_id);
+CREATE INDEX ON repair_orders (subscription_visit_id);        -- all repairs from a visit
+CREATE INDEX ON technician_work_logs (subscription_visit_id); -- visit-based salary queries
 ```
