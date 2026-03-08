@@ -5,6 +5,10 @@
 
 export const LABEL_PADDING_MM = 2.5;
 
+/** LAB 448 logo from public (bills, QR labels). Use this for all branded print. */
+export const LAB448_LOGO_SRC = "/lab448.png";
+
+/** Fallback if logo image fails to load (data URL). */
 export const PLACEHOLDER_LOGO_SRC =
   "data:image/svg+xml," +
   encodeURIComponent(
@@ -169,10 +173,11 @@ export function buildLeftColumnHtml(opts) {
   const nameFontSizePt = labelConfig.nameFontSizePt ?? DEFAULT_LABEL_CONFIG.nameFontSizePt;
   const safe1 = escapeHtml(line1);
   const safe2 = escapeHtml(line2);
+  const logoSrc = escapeHtml(LAB448_LOGO_SRC);
   return `
     <div class="qr-label-left" style="flex:0 0 50%;width:50%;max-width:50%;height:100%;display:flex;flex-direction:column;align-items:center;padding-top:${pad}mm;padding-bottom:${pad}mm;padding-left:1mm;padding-right:1mm;box-sizing:border-box;min-width:0;overflow:hidden">
       <div style="width:${logoSizeMm}mm;height:${logoSizeMm}mm;flex-shrink:0">
-        <img src="${PLACEHOLDER_LOGO_SRC}" alt="Logo" style="width:100%;height:100%;object-fit:contain;display:block" />
+        <img src="${logoSrc}" alt="LAB 448" style="width:100%;height:100%;object-fit:contain;display:block" />
       </div>
       <div style="flex:1 1 0;min-height:0"></div>
       <div class="qr-label-text-block" style="flex-shrink:0;width:100%;text-align:center">

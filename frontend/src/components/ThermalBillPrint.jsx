@@ -1,13 +1,13 @@
 /**
  * Thermal bill print: 80mm width, variable height (roll paper).
  * Layout: logo (same as QR labels) → Bill no. & date → customer (label + value same line) → grouped items → total → footer.
- * Uses LabelPrintShared for styles (same pattern as QR/Barcode), openPrintWindow, escapeHtml, PLACEHOLDER_LOGO_SRC.
+ * Uses LabelPrintShared for styles (same pattern as QR/Barcode), openPrintWindow, escapeHtml, LAB448_LOGO_SRC.
  */
 
 import {
   openPrintWindow,
   escapeHtml,
-  PLACEHOLDER_LOGO_SRC,
+  LAB448_LOGO_SRC,
   getThermalBillPrintStyles,
   THERMAL_BILL_WIDTH_MM,
 } from "./LabelPrintShared.js";
@@ -52,7 +52,7 @@ export function buildThermalBillHtml(billData) {
     customer = {},
     groups = [],
     total = 0,
-    logoSrc = PLACEHOLDER_LOGO_SRC,
+    logoSrc = LAB448_LOGO_SRC,
     footerWebsite = "lab448.ukesharyl.com.np",
     footerPhone = "98xxxxxxxx",
   } = billData;

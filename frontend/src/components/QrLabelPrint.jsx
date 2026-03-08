@@ -1,7 +1,7 @@
 import React, { forwardRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import {
-  PLACEHOLDER_LOGO_SRC,
+  LAB448_LOGO_SRC,
   LABEL_PADDING_MM,
   getLabelPrintStyles,
   openPrintWindow,
@@ -65,8 +65,8 @@ const QrLabelPrint = forwardRef(function QrLabelPrint(
           }}
         >
           <img
-            src={PLACEHOLDER_LOGO_SRC}
-            alt="Logo"
+            src={LAB448_LOGO_SRC}
+            alt="LAB 448"
             style={{
               width: "100%",
               height: "100%",
