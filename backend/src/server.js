@@ -4,7 +4,8 @@ import morgan from "morgan";
 import path from "path";
 import fs from "fs";
 import { PORT } from "./config.js";
-import { sequelize } from "./models/index.js";
+import models, { sequelize } from "./models/index.js";
+import { CHARGE_TYPES } from "./utils/constants.js";
 
 // V2 Fortified Routes
 import v2Routes from "./routes/index.js";
@@ -50,11 +51,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Unexpected error" });
 });
 
+const seedDefaultInvoicingData = async () => {
+  await models.ChargeType.findOrCreate({
+    where: { code: CHARGE_TYPES.GENERAL_SERVICE.CODE },
+    defaults: {
+      code: CHARGE_TYPES.GENERAL_SERVICE.CODE,
+      name: CHARGE_TYPES.GENERAL_SERVICE.NAME,
+      isDiscount: false,
+      isTax: false,
+      sortOrder: 0,
+      isActive: true,
+    },
+  });
+};
+
 // Test database connection and start server
 sequelize
   .authenticate()
-  .then(() => {
+  .then(async () => {
     console.log("✓ Database connection established");
+    await seedDefaultInvoicingData();
     app.listen(PORT, () => {
       console.log(`✓ Repair shop backend listening on port ${PORT}`);
     });

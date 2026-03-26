@@ -126,4 +126,7 @@ Object.values(models).forEach((model) => {
   }
 });
 
+models.sequelize = sequelize;
+models.Sequelize = Sequelize;
+
 export default models;

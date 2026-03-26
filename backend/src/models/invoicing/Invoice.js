@@ -21,6 +21,11 @@ export default (sequelize) => {
         allowNull: false,
         field: "customer_id",
       },
+      repairOrderId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        field: "repair_order_id",
+      },
       status: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -137,6 +142,10 @@ export default (sequelize) => {
     Invoice.belongsTo(models.Customer, {
       foreignKey: "customerId",
       as: "customer",
+    });
+    Invoice.belongsTo(models.RepairOrder, {
+      foreignKey: "repairOrderId",
+      as: "repairOrder",
     });
     Invoice.belongsTo(models.StaffMember, {
       foreignKey: "createdById",

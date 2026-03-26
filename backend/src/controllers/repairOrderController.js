@@ -1,10 +1,54 @@
 import models from "../models/index.js";
 import { logAudit } from "../middleware/audit.js";
-import { ROLES, INTAKE_SOURCES, REPAIR_STATUSES, REPAIR_PRIORITIES, REPAIR_LOCATIONS, ALLOWED_STATUS_TRANSITIONS } from "../utils/constants.js";
+import { ROLES, INTAKE_SOURCES, REPAIR_STATUSES, REPAIR_PRIORITIES, REPAIR_LOCATIONS, ALLOWED_STATUS_TRANSITIONS, REF_COUNTER_TYPES } from "../utils/constants.js";
+import { FRONTDESK_CHARGE } from "../config.js";
 
 // =====================================
 // Repair Workflow API
 // =====================================
+
+const generateNextTicketNumber = async (transaction) => {
+  const counterType = REF_COUNTER_TYPES.REPAIR_ORDER;
+  const [counter] = await models.RefCounter.findOrCreate({
+    where: { counterType },
+    defaults: {
+      counterType,
+      prefix: "RO",
+      lastValue: 0,
+      padLength: 6,
+    },
+    transaction,
+  });
+
+  counter.lastValue = Number(counter.lastValue || 0) + 1;
+  await counter.save({ transaction });
+
+  const padded = String(counter.lastValue).padStart(counter.padLength || 6, "0");
+  return `${counter.prefix}-${padded}`;
+};
+
+const generateNextQrToken = async (transaction) => {
+  const year = new Date().getFullYear();
+  const [counter] = await models.RefCounter.findOrCreate({
+    where: { counterType: REF_COUNTER_TYPES.QR_TOKEN },
+    defaults: {
+      counterType: REF_COUNTER_TYPES.QR_TOKEN,
+      prefix: `LAB448${year}`,
+      lastValue: 0,
+      padLength: 4,
+    },
+    transaction,
+  });
+
+  if (!String(counter.prefix).startsWith(`LAB448${year}`)) {
+    counter.prefix = `LAB448${year}`;
+    counter.lastValue = 0;
+  }
+
+  counter.lastValue = Number(counter.lastValue || 0) + 1;
+  await counter.save({ transaction });
+  return `${counter.prefix}${String(counter.lastValue).padStart(counter.padLength || 4, "0")}`;
+};
 
 export const listRepairOrders = async (req, res) => {
   try {
@@ -96,25 +140,58 @@ export const getRepairByToken = async (req, res) => {
 
 export const createRepairOrder = async (req, res) => {
   const { 
-    customerId, deviceId, serviceTypeId, priority,
+    customerId, deviceId, device, serviceTypeId, priority,
     intakeNotes, internalNotes,
     hasDelivery, pickupAddressId, deliveryAddressId, pickupScheduledAt, deliveryScheduledAt,
-    expectedCompletionAt, qrToken, subscriptionId, subscriptionVisitId, repairLocation
+    expectedCompletionAt, qrToken, subscriptionId, subscriptionVisitId, repairLocation, intakeSource, defaultServiceCharge
   } = req.body;
 
-  if (!customerId || !deviceId) {
+  if (!customerId || (!deviceId && !device)) {
     return res.status(400).json({ message: "Customer and Device are required" });
   }
 
   const t = await models.sequelize.transaction();
 
   try {
+    let finalDeviceId = deviceId;
+    if (!finalDeviceId && device) {
+      const newDevice = await models.CustomerDevice.create({
+        customerId,
+        brand: device.brand,
+        modelName: device.modelName,
+        serialNumber: device.serialNumber,
+        reportedIssue: intakeNotes || null,
+      }, { transaction: t });
+      finalDeviceId = newDevice.id;
+    }
+
+    const ticketNumber = await generateNextTicketNumber(t);
+    const generatedQrToken = qrToken || await generateNextQrToken(t);
+    const serviceType = serviceTypeId
+      ? await models.RepairServiceType.findByPk(serviceTypeId, { transaction: t })
+      : null;
+    const computedServiceCharge =
+      defaultServiceCharge !== undefined && defaultServiceCharge !== null
+        ? Number(defaultServiceCharge || 0)
+        : Number(serviceType?.defaultServiceCharge || 0) + Number(FRONTDESK_CHARGE || 0);
+
+    const allowedIntakeSources = new Set([
+      INTAKE_SOURCES.WALK_IN,
+      INTAKE_SOURCES.WEBSITE,
+      INTAKE_SOURCES.WHATSAPP,
+      INTAKE_SOURCES.PHONE,
+    ]);
+    const validIntakeSource = allowedIntakeSources.has(intakeSource)
+      ? intakeSource
+      : INTAKE_SOURCES.WALK_IN;
+
     const repair = await models.RepairOrder.create({
+      ticketNumber,
       customerId,
       createdById: req.user.id,
-      deviceId,
+      deviceId: finalDeviceId,
       serviceTypeId: serviceTypeId || null,
-      intakeChannel: INTAKE_SOURCES.WALK_IN, // Could be parameterized in future API
+      intakeChannel: validIntakeSource,
       status: REPAIR_STATUSES.PENDING,
       priority: priority || REPAIR_PRIORITIES.NORMAL,
       intakeNotes: intakeNotes || null,
@@ -126,7 +203,8 @@ export const createRepairOrder = async (req, res) => {
       pickupScheduledAt: pickupScheduledAt || null,
       deliveryScheduledAt: deliveryScheduledAt || null,
       estimatedCompletionAt: expectedCompletionAt || null,
-      qrToken: qrToken || null, 
+      qrToken: generatedQrToken,
+      defaultServiceCharge: computedServiceCharge,
       subscriptionId: subscriptionId || null,
       subscriptionVisitId: subscriptionVisitId || null,
       repairLocation: repairLocation || REPAIR_LOCATIONS.SHOP,

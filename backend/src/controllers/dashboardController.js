@@ -1,6 +1,6 @@
 import { Op } from "sequelize";
 import models from "../models/index.js";
-import { ROLES, REPAIR_STATUSES, PERMISSIONS } from "../utils/constants.js";
+import { ROLES, REPAIR_STATUSES, PERMISSIONS, INVOICE_STATUSES } from "../utils/constants.js";
 import { QR_LABEL } from "../config.js";
 
 // =====================================
@@ -272,7 +272,7 @@ export const financeDashboard = async (req, res) => {
       }),
       models.Invoice.findAll({
         where: {
-          status: { [Op.notIn]: ["PAID", "VOID"] },
+          status: { [Op.notIn]: [INVOICE_STATUSES.PAID, INVOICE_STATUSES.VOID] },
           totalAmount: { [Op.gt]: 0 },
         },
         include: [

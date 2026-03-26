@@ -1,12 +1,45 @@
 import models from "../models/index.js";
 import { logAudit } from "../middleware/audit.js";
-import { INVOICE_STATUSES, INVOICE_TYPES } from "../utils/constants.js";
+import { CHARGE_TYPES, INVOICE_STATUSES, INVOICE_TYPES, PAYMENT_METHODS } from "../utils/constants.js";
+import { createId } from "@paralleldrive/cuid2";
 
 import { Op } from 'sequelize';
 
 // =====================================
 // Invoicing API
 // =====================================
+
+export const listChargeTypes = async (req, res) => {
+    try {
+        const chargeTypes = await models.ChargeType.findAll({
+            where: { isActive: true },
+            order: [["sortOrder", "ASC"], ["name", "ASC"]],
+            attributes: ["id", "code", "name"],
+        });
+        res.json(chargeTypes);
+    } catch (err) {
+        console.error("List charge types error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+const resolveDefaultChargeTypeId = async (transaction) => {
+    const existing = await models.ChargeType.findOne({
+        where: { code: CHARGE_TYPES.GENERAL_SERVICE.CODE },
+        transaction,
+    });
+    if (existing) return existing.id;
+
+    const created = await models.ChargeType.create({
+        code: CHARGE_TYPES.GENERAL_SERVICE.CODE,
+        name: CHARGE_TYPES.GENERAL_SERVICE.NAME,
+        isDiscount: false,
+        isTax: false,
+        sortOrder: 0,
+        isActive: true,
+    }, { transaction });
+    return created.id;
+};
 
 export const getInvoiceForRepair = async (req, res) => {
     const { repairId } = req.params;
@@ -57,7 +90,10 @@ export const generateInvoice = async (req, res) => {
         const finalTax = taxAmount || (subTotal * (taxRate || 0));
         const finalTotal = subTotal + finalTax - (discountAmount || 0);
 
+        const invoiceNumber = `INV-${new Date().getFullYear()}-${createId().slice(0, 8).toUpperCase()}`;
+
         invoice = await models.Invoice.create({
+            invoiceNumber,
             repairOrderId: repairId,
             customerId: repair.customerId,
             totalAmount: finalTotal,
@@ -78,10 +114,11 @@ export const generateInvoice = async (req, res) => {
 
         // Add items
         if (items && items.length > 0) {
+            const fallbackChargeTypeId = await resolveDefaultChargeTypeId(t);
             const invoiceItemsData = items.map(item => ({
                 invoiceId: invoice.id,
                 repairOrderId: repairId,
-                chargeTypeId: item.chargeTypeId || null,
+                chargeTypeId: item.chargeTypeId || fallbackChargeTypeId,
                 description: item.description,
                 quantity: item.quantity || 1,
                 unitPrice: item.unitPrice || 0,
@@ -291,11 +328,12 @@ export const addInvoiceItem = async (req, res) => {
         const qty = quantity || 1;
         const price = unitPrice || 0;
         const amount = qty * price;
+        const fallbackChargeTypeId = await resolveDefaultChargeTypeId(t);
 
         const item = await models.InvoiceItem.create({
             invoiceId,
             repairOrderId: invoice.repairOrderId,
-            chargeTypeId: chargeTypeId || null,
+            chargeTypeId: chargeTypeId || fallbackChargeTypeId,
             description,
             quantity: qty,
             unitPrice: price,
@@ -470,7 +508,7 @@ export const applyCustomerLumpSumPayment = async (req, res) => {
         const invoices = await models.Invoice.findAll({
             where: {
                 customerId,
-                status: { [Op.notIn]: [INVOICE_STATUSES.PAID, "CANCELLED", "VOID"] },
+                status: { [Op.notIn]: [INVOICE_STATUSES.PAID, INVOICE_STATUSES.CANCELLED, INVOICE_STATUSES.VOID] },
             },
             order: [["createdAt", "ASC"]],
             transaction: t,
@@ -490,7 +528,7 @@ export const applyCustomerLumpSumPayment = async (req, res) => {
             const payment = await models.Payment.create({
                 invoiceId: inv.id,
                 amount: payNow,
-                paymentMethod: paymentMethod || "CASH",
+                paymentMethod: paymentMethod || PAYMENT_METHODS.CASH,
                 referenceNumber: referenceNumber || null,
                 receivedAt: new Date(),
                 receivedById: req.user.id,

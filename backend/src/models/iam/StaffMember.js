@@ -15,9 +15,19 @@ export default (sequelize) => {
         allowNull: false,
         field: "role_id",
       },
-      name: {
+      fullName: {
         type: DataTypes.STRING,
         allowNull: false,
+        field: "name",
+      },
+      name: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue("fullName");
+        },
+        set(value) {
+          this.setDataValue("fullName", value);
+        },
       },
       email: {
         type: DataTypes.STRING,

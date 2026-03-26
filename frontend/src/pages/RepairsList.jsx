@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import { api } from '../services/api';
-import { FiPlus, FiSearch } from 'react-icons/fi';
+import { APP_ROUTES } from '../constants/routes';
 
 export default function RepairsList() {
   const [repairs, setRepairs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -14,7 +15,7 @@ export default function RepairsList() {
 
   const fetchRepairs = async () => {
     try {
-      const res = await api.get('/repairs');
+      const res = await api.get('/repair-orders');
       setRepairs(res.data.data || []);
     } catch (err) {
       console.error("Failed to fetch repairs", err);
@@ -23,69 +24,125 @@ export default function RepairsList() {
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusBadge = (status) => {
     switch (status) {
-      case 'PENDING': return 'badge-warning';
-      case 'IN_REPAIR': return 'badge-neutral';
-      case 'DELIVERED': return 'badge-success';
-      default: return 'badge-neutral';
+      case 'PENDING': 
+        return <span className="badge badge-warning flex items-center gap-1"><span className="material-symbols-rounded" style={{fontSize: '14px'}}>pending_actions</span> Waiting</span>;
+      case 'IN_REPAIR': 
+        return <span className="badge badge-primary flex items-center gap-1"><span className="material-symbols-rounded" style={{fontSize: '14px'}}>build</span> In Progress</span>;
+      case 'READY_FOR_DELIVERY': 
+        return <span className="badge badge-success flex items-center gap-1"><span className="material-symbols-rounded" style={{fontSize: '14px'}}>verified</span> Ready</span>;
+      case 'DELIVERED': 
+        return <span className="badge badge-neutral flex items-center gap-1"><span className="material-symbols-rounded" style={{fontSize: '14px'}}>task_alt</span> Delivered</span>;
+      default: 
+        return <span className="badge badge-neutral">{status}</span>;
     }
   };
 
+  const filtered = repairs.filter(r => 
+    r.ticketNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.device?.modelName?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="animate-fade-in flex flex-col gap-6">
-      <header className="flex items-center justify-between">
+      
+      {/* Header */}
+      <header className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Repair Orders</h1>
-          <p className="text-secondary">Manage and track active device repairs.</p>
+          <h1 className="text-3xl font-extrabold mb-1">Repair Orders</h1>
+          <p className="text-secondary tracking-wide">Manage, track, and process active device repair orders.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/repairs/new')}>
-          <FiPlus /> New Intake
-        </button>
+        <div className="flex gap-3">
+          <NavLink to={APP_ROUTES.NEW_REPAIR_ORDER} className="btn btn-primary">
+            <span className="material-symbols-rounded icon-sm">add</span>
+            New Intake
+          </NavLink>
+        </div>
       </header>
 
-      <div className="card" style={{ padding: '0' }}>
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--panel-border)' }} className="flex gap-4">
-          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', padding: '0 1rem', borderRadius: 'var(--radius-sm)', width: '300px' }}>
-            <FiSearch color="var(--text-muted)" />
+      {/* Main Table Card */}
+      <div className="card p-0 overflow-hidden flex flex-col">
+        
+        {/* Toolbar */}
+        <div className="p-4 border-b border-panel bg-surface/30 flex justify-between items-center">
+          <div className="relative w-72">
+            <span className="material-symbols-rounded absolute left-3 top-2.5 text-muted icon-sm">search</span>
             <input 
               type="text" 
-              placeholder="Search ticket or customer..." 
-              style={{ border: 'none', background: 'transparent', outline: 'none', padding: '0.75rem', width: '100%', color: 'var(--text-primary)' }}
+              placeholder="Search tickets, customers, devices..." 
+              className="pl-9 py-2 text-sm bg-primary border-panel"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-ghost" onClick={fetchRepairs} title="Refresh">
+              <span className={`material-symbols-rounded icon-sm ${loading ? 'animate-spin' : ''}`}>refresh</span>
+            </button>
+            <button className="btn btn-ghost" title="Filter">
+              <span className="material-symbols-rounded icon-sm">filter_list</span>
+            </button>
           </div>
         </div>
         
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+        {/* Data Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
-                <th style={{ padding: '1rem 1.5rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Ticket</th>
-                <th style={{ padding: '1rem 1.5rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Customer</th>
-                <th style={{ padding: '1rem 1.5rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Device</th>
-                <th style={{ padding: '1rem 1.5rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Status</th>
-                <th style={{ padding: '1rem 1.5rem', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right' }}>Actions</th>
+              <tr className="bg-secondary/40">
+                <th className="py-3 px-6 text-xs font-bold text-muted uppercase tracking-wider border-b border-panel">Order ID</th>
+                <th className="py-3 px-6 text-xs font-bold text-muted uppercase tracking-wider border-b border-panel">Customer</th>
+                <th className="py-3 px-6 text-xs font-bold text-muted uppercase tracking-wider border-b border-panel">Device & Issue</th>
+                <th className="py-3 px-6 text-xs font-bold text-muted uppercase tracking-wider border-b border-panel">Status</th>
+                <th className="py-3 px-6 text-xs font-bold text-muted uppercase tracking-wider border-b border-panel text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="5" style={{ padding: '2rem', textAlign: 'center' }}>Loading repairs...</td></tr>
-              ) : repairs.length === 0 ? (
-                <tr><td colSpan="5" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No active repairs found.</td></tr>
-              ) : repairs.map(repair => (
-                <tr key={repair.id} style={{ borderBottom: '1px solid var(--panel-border)' }} className="card-hoverable">
-                  <td style={{ padding: '1rem 1.5rem', fontWeight: 500 }}>{repair.ticketNumber || 'TKT-001'}</td>
-                  <td style={{ padding: '1rem 1.5rem' }}>{repair.customer?.name || 'Unknown'}</td>
-                  <td style={{ padding: '1rem 1.5rem' }}>
-                    <div>{repair.device?.modelName || 'Unknown Device'}</div>
-                    <div className="text-xs text-muted">S/N: {repair.device?.serialNumber || 'N/A'}</div>
+                <tr>
+                  <td colSpan="5" className="py-12 text-center text-muted">
+                    <span className="material-symbols-rounded icon-lg animate-spin text-accent-primary mb-2">refresh</span>
+                    <p>Loading queue data...</p>
                   </td>
-                  <td style={{ padding: '1rem 1.5rem' }}>
-                    <span className={`badge ${getStatusColor(repair.status)}`}>{repair.status}</span>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-16 text-center text-muted bg-surface/10">
+                    <span className="material-symbols-rounded text-4xl mb-3 opacity-50">inbox</span>
+                    <p className="text-base font-semibold">No repairs found</p>
+                    <p className="text-sm">The queue is empty or no tickets match your search.</p>
                   </td>
-                  <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
-                    <button className="btn btn-secondary text-sm" onClick={() => navigate(`/repairs/${repair.id}`)} style={{ padding: '0.5rem 1rem' }}>
+                </tr>
+              ) : filtered.map(repair => (
+                <tr key={repair.id} className="border-b border-panel hover:bg-surface-hover transition-colors group cursor-pointer" onClick={() => navigate(APP_ROUTES.REPAIR_ORDER_DETAILS(repair.id))}>
+                  <td className="py-4 px-6">
+                    <div className="font-bold text-accent-primary">{repair.ticketNumber}</div>
+                    <div className="text-xs text-muted mt-0.5">{new Date(repair.createdAt).toLocaleDateString()}</div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="font-semibold text-primary">{repair.customer?.name || 'Unknown'}</div>
+                    <div className="text-xs text-secondary mt-0.5">{repair.customer?.phone || 'No phone'}</div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="font-medium text-primary">
+                      {repair.device?.brand} {repair.device?.modelName}
+                    </div>
+                    <div className="text-xs text-secondary mt-0.5 truncate max-w-xs" title={repair.intakeNotes}>
+                      {repair.intakeNotes || 'Standard diag & repair'}
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    {getStatusBadge(repair.status)}
+                  </td>
+                  <td className="py-4 px-6 text-right">
+                    <button 
+                      className="btn btn-secondary text-xs py-1.5 px-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => { e.stopPropagation(); navigate(APP_ROUTES.REPAIR_ORDER_DETAILS(repair.id)); }}
+                    >
                       Workspace
+                      <span className="material-symbols-rounded" style={{fontSize: '14px'}}>arrow_forward</span>
                     </button>
                   </td>
                 </tr>
@@ -93,6 +150,16 @@ export default function RepairsList() {
             </tbody>
           </table>
         </div>
+        
+        {/* Footer Pagination mock */}
+        <div className="p-3 border-t border-panel bg-surface/20 flex items-center justify-between text-xs text-muted">
+          <span>Showing {filtered.length} active tickets</span>
+          <div className="flex gap-1">
+            <button className="p-1 rounded hover:bg-surface disabled:opacity-50" disabled><span className="material-symbols-rounded icon-sm">chevron_left</span></button>
+            <button className="p-1 rounded hover:bg-surface disabled:opacity-50" disabled><span className="material-symbols-rounded icon-sm">chevron_right</span></button>
+          </div>
+        </div>
+
       </div>
     </div>
   );

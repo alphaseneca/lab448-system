@@ -1,5 +1,6 @@
 import models from "../models/index.js";
 import { logAudit } from "../middleware/audit.js";
+import { SUBSCRIPTION_STATUSES } from "../utils/constants.js";
 
 // =====================================
 // Subscriptions API (Domain 10)
@@ -51,7 +52,7 @@ export const subscribeCustomer = async (req, res) => {
       planId,
       cycleStartAt,
       cycleEndAt,
-      status: status || "ACTIVE",
+      status: status || SUBSCRIPTION_STATUSES.ACTIVE,
       subscribedById: req.user.id,
       autoRenew: true
     }, { transaction: t });
@@ -120,7 +121,7 @@ export const cancelCustomerSubscription = async (req, res) => {
 
     // Cancellation typically means setting status to CANCELLED and dropping autoRenew
     await sub.update({
-      status: "CANCELLED",
+      status: SUBSCRIPTION_STATUSES.CANCELLED,
       autoRenew: false
     });
 

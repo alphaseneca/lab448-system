@@ -82,7 +82,7 @@ export const authorize = (requiredPermissions = []) => {
     const userPerms = req.user.permissions || [];
     
     // Super admin bypass
-    if (userPerms.includes("*:*")) return next();
+    if (req.user.roleCode === 'ADMIN' || userPerms.includes("*:*")) return next();
     
     if (!requiredPermissions.length) {
       return next();
@@ -109,7 +109,7 @@ export const checkPermission = (required) => {
     const userPerms = req.user.permissions || [];
     
     // Super admin bypass
-    if (userPerms.includes("*:*")) return next();
+    if (req.user.roleCode === 'ADMIN' || userPerms.includes("*:*")) return next();
     
     const hasAny = perms.some((p) => userPerms.includes(p));
     if (!hasAny) {
@@ -131,7 +131,7 @@ export const requireRole = (requiredRoles) => {
     }
     
     const userPerms = req.user.permissions || [];
-    if (userPerms.includes("*:*")) return next();
+    if (req.user.roleCode === 'ADMIN' || userPerms.includes("*:*")) return next();
     
     const userRoleCode = req.user.roleCode;
     if (!userRoleCode || !codes.includes(userRoleCode)) {

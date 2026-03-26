@@ -1,0 +1,21 @@
+export const APP_ROUTES = {
+  LOGIN: '/login',
+  DASHBOARD: '/dashboard',
+  DASHBOARD_ADMIN: '/dashboard/admin',
+  DASHBOARD_TECHNICIAN: '/dashboard/technician',
+  DASHBOARD_FRONT_DESK: '/dashboard/front-desk',
+  DASHBOARD_LOGISTICS: '/dashboard/logistics',
+  DASHBOARD_FINANCE: '/dashboard/finance',
+  DASHBOARD_MANAGER: '/dashboard/manager',
+  REPAIR_ORDERS: '/repair-orders',
+  REPAIR_ORDERS_LIST: '/repair-orders/list',
+  REPAIR_ORDERS_QUEUE: '/repair-orders/queue',
+  NEW_REPAIR_ORDER: '/repair-orders/new',
+  REPAIR_ORDER_DETAILS: (id = ':id') => `/repair-orders/${id}`,
+  REPAIR_ORDER_BILLING: (id = ':id') => `/repair-orders/${id}/billing`,
+  CUSTOMERS: '/customers',
+  CUSTOMER_DETAILS: (id = ':id') => `/customers/${id}`,
+  INVENTORY: '/inventory',
+  USERS: '/users',
+};
+

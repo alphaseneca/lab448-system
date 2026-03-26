@@ -108,6 +108,7 @@ export const INVOICE_STATUSES = {
   SENT: "SENT",
   PARTIAL: "PARTIAL",
   PAID: "PAID",
+  CANCELLED: "CANCELLED",
   VOID: "VOID"
 };
 
@@ -122,6 +123,13 @@ export const PAYMENT_METHODS = {
   BANK_TRANSFER: "BANK_TRANSFER",
   QR_CODE: "QR_CODE",
   DYNAMIC_QR: "DYNAMIC_QR"
+};
+
+export const CHARGE_TYPES = {
+  GENERAL_SERVICE: {
+    CODE: "GENERAL_SERVICE",
+    NAME: "General Service",
+  },
 };
 
 export const STOCK_MOVEMENT_TYPES = {
@@ -172,6 +180,11 @@ export const EVENT_TYPES = {
   REPAIR_COMPLETED: "REPAIR_COMPLETED",
   PAYMENT_RECEIVED: "PAYMENT_RECEIVED",
   RIDER_DISPATCHED: "RIDER_DISPATCHED"
+};
+
+export const REF_COUNTER_TYPES = {
+  REPAIR_ORDER: "REPAIR_ORDER",
+  QR_TOKEN: "QR_TOKEN",
 };
 
 // =====================================

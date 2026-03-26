@@ -20,7 +20,7 @@ router.use("/service-catalog", serviceCatalogRoutes);
 
 // Domain 4: Repair Workflow
 import repairRoutes from "./repairWorkflow.js";
-router.use("/repairs", repairRoutes);
+router.use("/repair-orders", repairRoutes);
 
 // Domain 5: Invoicing
 import invoiceRoutes from "./invoicing.js";

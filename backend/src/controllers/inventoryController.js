@@ -1,6 +1,7 @@
 import models from "../models/index.js";
 import { logAudit } from "../middleware/audit.js";
 import { STOCK_MOVEMENT_TYPES } from "../utils/constants.js";
+import { Op } from "sequelize";
 
 // =====================================
 // Inventory API (Domain 6)
@@ -9,6 +10,7 @@ import { STOCK_MOVEMENT_TYPES } from "../utils/constants.js";
 export const listParts = async (req, res) => {
   try {
     const parts = await models.RepairPartCatalog.findAll({
+      where: { isActive: true },
       order: [["name", "ASC"]],
     });
     res.json(parts);
@@ -19,16 +21,50 @@ export const listParts = async (req, res) => {
 };
 
 export const createPart = async (req, res) => {
-  const { sku, name, description, category, unitCostPrice, unitSellPrice, minStockLevel, currentStock } = req.body;
+  const {
+    sku,
+    name,
+    description,
+    category,
+    unitCostPrice,
+    unitSellPrice,
+    reorderThreshold,
+    availableQuantity,
+    minStockLevel,
+    currentStock,
+  } = req.body;
 
-  if (!sku || !name) {
-    return res.status(400).json({ message: "SKU and Name are required" });
+  if (!name) {
+    return res.status(400).json({ message: "Name is required" });
   }
 
   const t = await models.sequelize.transaction();
   try {
+    let finalSku = sku;
+    if (!finalSku) {
+      const existing = await models.RepairPartCatalog.findAll({
+        attributes: ["sku"],
+        where: { sku: { [Op.like]: "LABSKU-%" } },
+        transaction: t,
+      });
+      let highest = 0;
+      existing.forEach((row) => {
+        const raw = row.sku || "";
+        const parsed = Number(raw.replace("LABSKU-", ""));
+        if (!Number.isNaN(parsed) && parsed > highest) highest = parsed;
+      });
+      finalSku = `LABSKU-${highest + 1}`;
+    }
+
     const part = await models.RepairPartCatalog.create({
-      sku, name, description, category: category || "GENERAL", unitCostPrice, unitSellPrice: unitSellPrice || 0, minStockLevel: minStockLevel || 0, currentStock: currentStock || 0
+      sku: finalSku,
+      name,
+      description,
+      category: category || "GENERAL",
+      unitCostPrice: unitCostPrice || 0,
+      unitSellPrice: unitSellPrice || 0,
+      reorderThreshold: reorderThreshold ?? minStockLevel ?? 0,
+      availableQuantity: availableQuantity ?? currentStock ?? 0,
     }, { transaction: t });
 
     await logAudit({
@@ -42,11 +78,12 @@ export const createPart = async (req, res) => {
     }, t);
 
     // If starting with stock, log the stock movement
-    if (currentStock > 0) {
+    const initialQty = Number(availableQuantity ?? currentStock ?? 0);
+    if (initialQty > 0) {
        await models.StockMovement.create({
          partId: part.id,
          movementType: STOCK_MOVEMENT_TYPES.IN,
-         quantity: currentStock,
+         quantity: initialQty,
          referenceId: `INIT-${part.id}`,
          performedById: req.user.id,
          notes: "Initial stock entry",
@@ -81,7 +118,7 @@ export const addStock = async (req, res) => {
        return res.status(404).json({ message: "Part not found" });
     }
 
-    part.currentStock += Number(quantity);
+    part.availableQuantity += Number(quantity);
     await part.save({ transaction: t });
 
     await models.StockMovement.create({
@@ -112,7 +149,7 @@ export const addStock = async (req, res) => {
 
 export const updatePart = async (req, res) => {
   const { id } = req.params;
-  const { sku, name, description, category, unitCostPrice, unitSellPrice, minStockLevel } = req.body;
+  const { sku, name, description, category, unitCostPrice, unitSellPrice, reorderThreshold, minStockLevel } = req.body;
   
   try {
     const part = await models.RepairPartCatalog.findByPk(id);
@@ -127,7 +164,12 @@ export const updatePart = async (req, res) => {
       category: category !== undefined ? category : part.category,
       unitCostPrice: unitCostPrice !== undefined ? unitCostPrice : part.unitCostPrice,
       unitSellPrice: unitSellPrice !== undefined ? unitSellPrice : part.unitSellPrice,
-      minStockLevel: minStockLevel !== undefined ? minStockLevel : part.minStockLevel
+      reorderThreshold:
+        reorderThreshold !== undefined
+          ? reorderThreshold
+          : minStockLevel !== undefined
+            ? minStockLevel
+            : part.reorderThreshold
     });
 
     await logAudit({

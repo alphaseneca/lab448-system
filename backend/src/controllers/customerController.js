@@ -55,7 +55,7 @@ export const createCustomer = async (req, res) => {
   const {
     name, isCompany, companyContactPerson, panNumber,
     phonePrimary, phoneSecondary, email,
-    preferredChannel, intakeSource, notes
+    preferredChannel, intakeSource, notes, primaryAddress
   } = req.body;
 
   if (!name || (!phonePrimary && !phoneSecondary)) {
@@ -75,6 +75,19 @@ export const createCustomer = async (req, res) => {
       intakeSource: intakeSource || INTAKE_SOURCES.WALK_IN,
       notes: notes || null
     });
+
+    if (primaryAddress && (primaryAddress.addressLine || primaryAddress.latitude || primaryAddress.longitude)) {
+      await models.CustomerAddress.create({
+        customerId: customer.id,
+        label: primaryAddress.label || "Primary",
+        addressLine: primaryAddress.addressLine || null,
+        cityDistrict: primaryAddress.cityDistrict || null,
+        nearestBranch: primaryAddress.nearestBranch || null,
+        latitude: primaryAddress.latitude || null,
+        longitude: primaryAddress.longitude || null,
+        isDefault: true,
+      });
+    }
 
     await logAudit({
       userId: req.user.id,

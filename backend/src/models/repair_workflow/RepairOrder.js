@@ -251,6 +251,10 @@ export default (sequelize) => {
       foreignKey: "repairOrderId",
       as: "invoiceItems",
     });
+    RepairOrder.hasOne(models.Invoice, {
+      foreignKey: "repairOrderId",
+      as: "invoice",
+    });
     RepairOrder.hasMany(models.RepairPartUsed, {
       foreignKey: "repairOrderId",
       as: "partsUsed",
