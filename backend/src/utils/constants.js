@@ -1,0 +1,199 @@
+// =====================================
+// System Constants & Enumerators
+// =====================================
+// Defined strictly by schema.dbml specifications. 
+// Do not use ad-hoc strings in models or controllers. 
+
+export const ROLES = {
+  ADMIN: "ADMIN",
+  TECHNICIAN: "TECHNICIAN",
+  FRONT_DESK: "FRONT_DESK",
+  LOGISTICS: "LOGISTICS",
+  FINANCE: "FINANCE",
+  MANAGER: "MANAGER"
+};
+
+export const PERMISSIONS = {
+  // IAM & Roles
+  MANAGE_STAFF: "manage:staff",
+  
+  // Customer
+  CUSTOMER_VIEW: "customer:view",
+  CUSTOMER_EDIT: "customer:edit",
+  CUSTOMER_DELETE: "customer:delete",
+  
+  // Repairs & Service Catalog
+  REPAIR_VIEW: "repair:view",
+  REPAIR_CREATE: "repair:create",
+  REPAIR_EDIT: "repair:edit",
+  REPAIR_DELETE: "repair:delete",
+  REPAIR_STATUS_UPDATE: "repair:update_status",
+  SERVICE_CATALOG_MANAGE: "service_catalog:manage",
+  
+  // Billing & Invoicing
+  MANAGE_BILLING: "billing:manage",
+  
+  // Inventory
+  INVENTORY_VIEW: "inventory:view",
+  INVENTORY_MANAGE: "inventory:manage",
+  
+  // Communications
+  COMMUNICATIONS_VIEW: "communications:view",
+  COMMUNICATIONS_MANAGE: "communications:manage",
+  COMMUNICATIONS_SEND: "communications:send",
+  
+  // Subscriptions
+  SUBSCRIPTION_VIEW: "subscription:view",
+  SUBSCRIPTION_MANAGE: "subscription:manage",
+  
+  // System / Misc
+  VIEW_DASHBOARD: "view:dashboard",
+  SYSTEM_MANAGE: "system:manage",
+};
+
+export const TECHNICIAN_RANKS = {
+  JUNIOR: "JUNIOR",
+  SENIOR: "SENIOR",
+  EXPERT: "EXPERT",
+  MASTER: "MASTER"
+};
+
+export const CUSTOMER_PREFERRED_CHANNELS = {
+  SMS: "SMS",
+  WHATSAPP: "WHATSAPP",
+  EMAIL: "EMAIL"
+};
+
+export const INTAKE_SOURCES = {
+  WALK_IN: "WALK_IN",
+  WEBSITE: "WEBSITE",
+  WHATSAPP: "WHATSAPP",
+  PHONE: "PHONE"
+};
+
+export const REPAIR_STATUSES = {
+  PENDING: "PENDING",
+  IN_DIAGNOSTICS: "IN_DIAGNOSTICS",
+  WAITING_FOR_PARTS: "WAITING_FOR_PARTS",
+  WAITING_ON_CUSTOMER: "WAITING_ON_CUSTOMER",
+  APPROVED: "APPROVED",
+  IN_REPAIR: "IN_REPAIR",
+  QUALITY_CONTROL: "QUALITY_CONTROL",
+  READY_FOR_DELIVERY: "READY_FOR_DELIVERY",
+  DELIVERED: "DELIVERED",
+  CANCELLED: "CANCELLED"
+};
+
+export const REPAIR_PRIORITIES = {
+  NORMAL: "NORMAL",
+  HIGH: "HIGH",
+  URGENT: "URGENT"
+};
+
+export const REPAIR_LOCATIONS = {
+  SHOP: "SHOP",
+  ON_SITE: "ON_SITE"
+};
+
+export const DEVICE_LOCATIONS = {
+  AT_CUSTOMER: "AT_CUSTOMER",
+  IN_TRANSIT_TO_SHOP: "IN_TRANSIT_TO_SHOP",
+  AT_SHOP: "AT_SHOP",
+  IN_TRANSIT_TO_CUSTOMER: "IN_TRANSIT_TO_CUSTOMER",
+  DELIVERED: "DELIVERED"
+};
+
+export const INVOICE_STATUSES = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  PARTIAL: "PARTIAL",
+  PAID: "PAID",
+  VOID: "VOID"
+};
+
+export const INVOICE_TYPES = {
+  REPAIR: "REPAIR",
+  SUBSCRIPTION_FEE: "SUBSCRIPTION_FEE"
+};
+
+export const PAYMENT_METHODS = {
+  CASH: "CASH",
+  CARD: "CARD",
+  BANK_TRANSFER: "BANK_TRANSFER",
+  QR_CODE: "QR_CODE",
+  DYNAMIC_QR: "DYNAMIC_QR"
+};
+
+export const STOCK_MOVEMENT_TYPES = {
+  IN: "IN",
+  OUT: "OUT",
+  ADJUST_UP: "ADJUST_UP",
+  ADJUST_DOWN: "ADJUST_DOWN",
+  RETURN: "RETURN"
+};
+
+export const PURCHASE_ORDER_STATUSES = {
+  DRAFT: "DRAFT",
+  ORDERED: "ORDERED",
+  PARTIAL_RECEIVED: "PARTIAL_RECEIVED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED"
+};
+
+export const COMMUNICATION_CHANNELS = {
+  SMS: "SMS",
+  WHATSAPP: "WHATSAPP",
+  EMAIL: "EMAIL"
+};
+
+export const COMMUNICATION_DIRECTIONS = {
+  INBOUND: "INBOUND",
+  OUTBOUND: "OUTBOUND"
+};
+
+export const COMMUNICATION_STATUSES = {
+  QUEUED: "QUEUED",
+  SENT: "SENT",
+  DELIVERED: "DELIVERED",
+  READ: "READ",
+  FAILED: "FAILED"
+};
+
+export const SUBSCRIPTION_STATUSES = {
+  ACTIVE: "ACTIVE",
+  SUSPENDED: "SUSPENDED",
+  CANCELLED: "CANCELLED",
+  EXPIRED: "EXPIRED"
+};
+
+export const EVENT_TYPES = {
+  REPAIR_INTAKE: "REPAIR_INTAKE",
+  ESTIMATE_READY: "ESTIMATE_READY",
+  REPAIR_COMPLETED: "REPAIR_COMPLETED",
+  PAYMENT_RECEIVED: "PAYMENT_RECEIVED",
+  RIDER_DISPATCHED: "RIDER_DISPATCHED"
+};
+
+// =====================================
+// Metadata & Business Logic Rules
+// =====================================
+
+export const ALLOWED_STATUS_TRANSITIONS = {
+  [REPAIR_STATUSES.PENDING]: [REPAIR_STATUSES.IN_DIAGNOSTICS, REPAIR_STATUSES.CANCELLED],
+  [REPAIR_STATUSES.IN_DIAGNOSTICS]: [REPAIR_STATUSES.WAITING_FOR_PARTS, REPAIR_STATUSES.APPROVED, REPAIR_STATUSES.CANCELLED],
+  [REPAIR_STATUSES.WAITING_FOR_PARTS]: [REPAIR_STATUSES.APPROVED, REPAIR_STATUSES.CANCELLED],
+  [REPAIR_STATUSES.APPROVED]: [REPAIR_STATUSES.IN_REPAIR],
+  [REPAIR_STATUSES.IN_REPAIR]: [REPAIR_STATUSES.QUALITY_CONTROL, REPAIR_STATUSES.WAITING_FOR_PARTS],
+  [REPAIR_STATUSES.QUALITY_CONTROL]: [REPAIR_STATUSES.READY_FOR_DELIVERY, REPAIR_STATUSES.IN_REPAIR],
+  [REPAIR_STATUSES.READY_FOR_DELIVERY]: [REPAIR_STATUSES.DELIVERED],
+  [REPAIR_STATUSES.DELIVERED]: [],
+  [REPAIR_STATUSES.CANCELLED]: [REPAIR_STATUSES.DELIVERED]
+};
+
+export const TECHNICIAN_RANK_LABELS = {
+  [TECHNICIAN_RANKS.JUNIOR]: "Repair Soldier",
+  [TECHNICIAN_RANKS.SENIOR]: "Repair Sergeant",
+  [TECHNICIAN_RANKS.EXPERT]: "Repair Commander",
+  [TECHNICIAN_RANKS.MASTER]: "Repair General"
+};
+

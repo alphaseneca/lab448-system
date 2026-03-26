@@ -1,70 +1,104 @@
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config.js";
-import db from "../db.js";
+import models from "../models/index.js";
+import { ROLES } from "../utils/constants.js";
 
+/**
+ * Authenticate JWT tokens and attach the StaffMember (with joined Role and Permissions) to req.user.
+ */
 export const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Missing or invalid authorization header" });
+    return res
+      .status(401)
+      .json({ message: "Missing or invalid authorization header" });
   }
 
   const token = authHeader.split(" ")[1];
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = await db.User.findByPk(payload.sub, {
-      include: [{ model: db.Role, as: "role" }],
+
+    // V2: Querying StaffMember instead of legacy User
+    const staffMember = await models.StaffMember.findByPk(payload.sub, {
+      include: [
+        {
+          model: models.Role,
+          as: "role",
+          include: [
+            {
+              model: models.Permission,
+              as: "permissions",
+              through: { attributes: [] }, // RolePermission join table
+            },
+          ],
+        },
+      ],
     });
 
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: "User not found or inactive" });
+    if (!staffMember || !staffMember.isActive) {
+      return res
+        .status(401)
+        .json({ message: "Staff member not found or inactive" });
     }
 
-    const permissions = Array.isArray(user.role?.permissions)
-      ? user.role.permissions
-      : user.role?.permissions?.permissions || [];
+    // Extract raw permission code strings from the joined User->Role->Permissions array
+    const permissions =
+      staffMember.role && Array.isArray(staffMember.role.permissions)
+        ? staffMember.role.permissions.map((p) => p.code)
+        : [];
+
     req.user = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      roleId: user.roleId,
-      roleName: user.role?.name,
-      roleCode: user.role?.code || null,
+      id: staffMember.id,
+      name: staffMember.fullName,
+      email: staffMember.email,
+      roleId: staffMember.roleId,
+      roleName: staffMember.role?.name,
+      roleCode: staffMember.role?.code,
       permissions,
-      commissionRate:
-        user.role?.code === "TECHNICIAN" ? user.commissionRate : null,
-      technicianLevel: user.technicianLevel,
-      technicianLevelDisplay: user.technicianLevelDisplay,
+      // Pass along technician details if applicable
+      technicianRank: staffMember.technicianRank,
+      isTechnician: staffMember.role?.code === ROLES.TECHNICIAN,
     };
 
     next();
   } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired" });
+    }
     console.error("Auth error", err);
-    return res.status(401).json({ message: "Invalid or expired token" });
+    return res.status(401).json({ message: "Invalid token" });
   }
 };
 
+/**
+ * Require ALL listed permissions. ADMIN (*:*) bypasses.
+ */
 export const authorize = (requiredPermissions = []) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     const userPerms = req.user.permissions || [];
+    
+    // Super admin bypass
     if (userPerms.includes("*:*")) return next();
+    
     if (!requiredPermissions.length) {
       return next();
     }
+    
     const hasAll = requiredPermissions.every((p) => userPerms.includes(p));
     if (!hasAll) {
-      return res.status(403).json({ message: "Forbidden" });
+      return res.status(403).json({ message: "Forbidden: Missing required permissions" });
     }
+    
     next();
   };
 };
 
 /**
- * Permission check middleware. ADMIN (*:*) bypasses all checks.
- * @param {string|string[]} required - Single permission or array (any of these grants access)
+ * Require ANY of the listed permissions. ADMIN (*:*) bypasses.
  */
 export const checkPermission = (required) => {
   const perms = Array.isArray(required) ? required : [required];
@@ -73,18 +107,21 @@ export const checkPermission = (required) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
     const userPerms = req.user.permissions || [];
+    
+    // Super admin bypass
     if (userPerms.includes("*:*")) return next();
+    
     const hasAny = perms.some((p) => userPerms.includes(p));
     if (!hasAny) {
-      return res.status(403).json({ message: "Insufficient permissions" });
+      return res.status(403).json({ message: "Forbidden: Insufficient permissions" });
     }
+    
     next();
   };
 };
 
 /**
  * Role check middleware. Requires one of the given role codes. ADMIN always has access.
- * @param {string|string[]} requiredRoles - Role code(s) - any grants access
  */
 export const requireRole = (requiredRoles) => {
   const codes = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
@@ -92,12 +129,15 @@ export const requireRole = (requiredRoles) => {
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
+    
     const userPerms = req.user.permissions || [];
     if (userPerms.includes("*:*")) return next();
+    
     const userRoleCode = req.user.roleCode;
     if (!userRoleCode || !codes.includes(userRoleCode)) {
-      return res.status(403).json({ message: "Insufficient role access" });
+      return res.status(403).json({ message: "Forbidden: Insufficient role access" });
     }
+    
     next();
   };
 };

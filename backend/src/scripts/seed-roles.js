@@ -3,84 +3,75 @@
  * Usage: node src/scripts/seed-roles.js
  */
 import { Op } from "sequelize";
-import db from "../db.js";
+import db from "../models/index.js"; // DB object exported differently in V2
+import { ROLES, PERMISSIONS } from "../utils/constants.js";
 
-const ROLES = [
+const SYSTEM_ROLES_CONFIG = [
   {
     id: "role_tech",
-    code: "TECHNICIAN",
+    code: ROLES.TECHNICIAN,
     name: "Repair Army",
     description: "Performs repairs and updates job status",
     permissions: [
-      "repair:view",
-      "repair:update_status",
-      "repair:add_notes",
-      "inventory:request",
-      "repair:use_inventory",
-      "view:dashboard",
+      PERMISSIONS.REPAIR_VIEW,
+      PERMISSIONS.REPAIR_STATUS_UPDATE,
+      PERMISSIONS.REPAIR_EDIT,
+      PERMISSIONS.INVENTORY_VIEW,
+      PERMISSIONS.VIEW_DASHBOARD,
     ],
   },
   {
     id: "role_fd",
-    code: "FRONT_DESK",
+    code: ROLES.FRONT_DESK,
     name: "Front Desk",
     description: "Customer intake, job creation, coordination",
     permissions: [
-      "customer:create",
-      "device:create",
-      "repair:create",
-      "repair:intake",
-      "repair:view_all",
-      "repair:view",
-      "repair:update_status",
-      "repair:billing",
-      "payment:receive",
-      "repair:payment",
-      "view:dashboard",
+      PERMISSIONS.CUSTOMER_VIEW,
+      PERMISSIONS.CUSTOMER_EDIT,
+      PERMISSIONS.REPAIR_CREATE,
+      PERMISSIONS.REPAIR_VIEW,
+      PERMISSIONS.REPAIR_STATUS_UPDATE,
+      PERMISSIONS.MANAGE_BILLING,
+      PERMISSIONS.VIEW_DASHBOARD,
     ],
   },
   {
     id: "role_log",
-    code: "LOGISTICS",
+    code: ROLES.LOGISTICS,
     name: "Logistics Crew",
     description: "Inventory management and parts handling",
     permissions: [
-      "inventory:manage",
-      "manage:inventory",
-      "inventory:assign_to_repair",
-      "repair:view_pending_requests",
-      "view:dashboard",
+      PERMISSIONS.INVENTORY_MANAGE,
+      PERMISSIONS.INVENTORY_VIEW,
+      PERMISSIONS.REPAIR_VIEW,
+      PERMISSIONS.VIEW_DASHBOARD,
     ],
   },
   {
     id: "role_fin",
-    code: "FINANCE",
+    code: ROLES.FINANCE,
     name: "Finance Desk",
     description: "Payments, reconciliation, refunds",
     permissions: [
-      "payment:manage",
-      "repair:view_billing",
-      "repair:billing",
-      "repair:payment",
-      "reports:financial",
-      "view:dashboard",
+      PERMISSIONS.MANAGE_BILLING,
+      PERMISSIONS.REPAIR_VIEW,
+      PERMISSIONS.VIEW_DASHBOARD,
     ],
   },
   {
     id: "role_mgr",
-    code: "MANAGER",
+    code: ROLES.MANAGER,
     name: "Operations Command",
     description: "Oversees operations and approvals",
     permissions: [
-      "repair:view_all",
-      "reports:operations",
-      "user:view",
-      "view:dashboard",
+      PERMISSIONS.REPAIR_VIEW,
+      PERMISSIONS.MANAGE_STAFF,
+      PERMISSIONS.VIEW_DASHBOARD,
     ],
   },
   {
     id: "role_admin",
-    code: "ADMIN",
+    code: ROLES.ADMIN,
     name: "HQ Access",
     description: "Full system access and configuration",
     permissions: ["*:*"],
@@ -90,7 +81,7 @@ const ROLES = [
 async function seedRoles() {
   try {
     console.log("Seeding roles...");
-    for (const role of ROLES) {
+    for (const role of SYSTEM_ROLES_CONFIG) {
       const existing = await db.Role.findOne({
         where: { [Op.or]: [{ code: role.code }, { id: role.id }] },
       });

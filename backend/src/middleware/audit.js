@@ -1,24 +1,32 @@
-import db from "../db.js";
+import models from "../models/index.js";
 
+/**
+ * Creates an AuditEvent record (Domain 9)
+ */
 export const logAudit = async ({
   userId,
-  repairId,
+  repairOrderId,
+  actorType = "STAFF",
+  eventName,
   entityType,
   entityId,
-  action,
-  metadata,
+  beforeSnapshot = null,
+  afterSnapshot = null,
+  ipAddress = null,
 }, transaction = null) => {
   try {
-    await db.AuditLog.create({
-      userId: userId || null,
-      repairId: repairId || null,
+    await models.AuditEvent.create({
+      performedById: userId || null, // null if system action
+      actorType,
+      eventName,
       entityType,
       entityId,
-      action,
-      metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : null,
+      repairOrderId: repairOrderId || null,
+      beforeSnapshot: beforeSnapshot ? JSON.parse(JSON.stringify(beforeSnapshot)) : null,
+      afterSnapshot: afterSnapshot ? JSON.parse(JSON.stringify(afterSnapshot)) : null,
+      ipAddress,
     }, { transaction });
   } catch (err) {
-    console.error("Failed to write audit log", err);
+    console.error("Failed to write audit event", err);
   }
 };
-

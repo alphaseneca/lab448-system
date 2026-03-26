@@ -4,15 +4,10 @@ import morgan from "morgan";
 import path from "path";
 import fs from "fs";
 import { PORT } from "./config.js";
-import { sequelize } from "./db.js";
-import authRoutes from "./routes/auth.js";
-import repairsRoutes from "./routes/repairs.js";
-import inventoryRoutes from "./routes/inventory.js";
-import dashboardRoutes from "./routes/dashboard.js";
-import usersRoutes from "./routes/users.js";
-import repairCategoriesRoutes from "./routes/repairCategories.js";
-import customersRoutes from "./routes/customers.js";
-import configRoutes from "./routes/config.js";
+import { sequelize } from "./models/index.js";
+
+// V2 Fortified Routes
+import v2Routes from "./routes/index.js";
 
 const app = express();
 
@@ -37,14 +32,8 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/repairs", repairsRoutes);
-app.use("/api/inventory", inventoryRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/users", usersRoutes);
-app.use("/api/repair-categories", repairCategoriesRoutes);
-app.use("/api/customers", customersRoutes);
-app.use("/api/config", configRoutes);
+// Mount all V2 routes
+app.use("/api", v2Routes);
 
 // In production (e.g. Docker), serve built frontend from ./public (SPA fallback)
 const publicPath = path.join(process.cwd(), "public");

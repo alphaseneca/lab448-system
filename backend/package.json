@@ -10,8 +10,7 @@
     "db:sync": "node src/scripts/db-sync.js",
     "db:migrate": "sequelize-cli db:migrate",
     "db:seed-categories": "node src/scripts/seed-repair-categories.js",
-    "db:seed-roles": "node src/scripts/seed-roles.js",
-    "fix-admin": "node src/scripts/fix-admin.js"
+    "db:seed-roles": "node src/scripts/seed-roles.js"
   },
   "keywords": [
     "express",

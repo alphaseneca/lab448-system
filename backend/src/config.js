@@ -1,4 +1,18 @@
+/**
+ * Lab448 System Configuration
+ *
+ * Responsibilities:
+ * - Environment variables (dotenv)
+ * - Feature flags and business constants
+ * - Infrastructure settings (DB URL, JWT Secret)
+ *
+ * Role of other core files:
+ * - server.js: Express app initialization, middleware mounting, and listener.
+ * - models/index.js: Sequelize instance creation and model association.
+ * - utils/: Pure helper functions (validation, formatting) without side effects.
+ */
 import dotenv from "dotenv";
+
 
 dotenv.config();
 
@@ -6,68 +20,8 @@ export const PORT = process.env.PORT || 4000;
 export const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 export const JWT_EXPIRES_IN = "8h";
 
-export const REPAIR_STATUS = {
-  INTAKE: "INTAKE",
-  TO_REPAIR: "TO_REPAIR",
-  IN_REPAIR: "IN_REPAIR",
-  REPAIRED: "REPAIRED",
-  UNREPAIRABLE: "UNREPAIRABLE",
-  DELIVERED: "DELIVERED",
-};
+export const DATABASE_URL = process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/lab448_system_mock";
 
-//  Added missing transitions
-export const ALLOWED_STATUS_TRANSITIONS = {
-  INTAKE: ["TO_REPAIR"],
-  // Allow reverting back to INTAKE from TO_REPAIR to support manual corrections
-  TO_REPAIR: ["IN_REPAIR", "INTAKE"],
-  IN_REPAIR: ["REPAIRED", "UNREPAIRABLE"],
-  REPAIRED: ["DELIVERED"],
-  UNREPAIRABLE: ["DELIVERED"],
-  DELIVERED: [],
-};
-
-export const PERMISSIONS = {
-  // Legacy (kept for backward compatibility)
-  VIEW_DASHBOARD: "view:dashboard",
-  MANAGE_INVENTORY: "manage:inventory",
-  INTAKE_REPAIR: "repair:intake",
-  UPDATE_REPAIR_STATUS: "repair:update_status",
-  USE_INVENTORY: "repair:use_inventory",
-  MANAGE_BILLING: "repair:billing",
-  TAKE_PAYMENT: "repair:payment",
-  MANAGE_USERS: "users:manage",
-  // New permission keys
-  REPAIR_VIEW: "repair:view",
-  REPAIR_VIEW_ALL: "repair:view_all",
-  REPAIR_CREATE: "repair:create",
-  REPAIR_ADD_NOTES: "repair:add_notes",
-  INVENTORY_REQUEST: "inventory:request",
-  INVENTORY_MANAGE: "inventory:manage",
-  INVENTORY_ASSIGN: "inventory:assign_to_repair",
-  PAYMENT_RECEIVE: "payment:receive",
-  PAYMENT_MANAGE: "payment:manage",
-  REPAIR_VIEW_BILLING: "repair:view_billing",
-  REPORTS_FINANCIAL: "reports:financial",
-  REPORTS_OPERATIONS: "reports:operations",
-  USER_VIEW: "user:view",
-  ADMIN_WILDCARD: "*:*",
-};
-
-export const ROLE_CODES = {
-  TECHNICIAN: "TECHNICIAN",
-  FRONT_DESK: "FRONT_DESK",
-  LOGISTICS: "LOGISTICS",
-  FINANCE: "FINANCE",
-  MANAGER: "MANAGER",
-  ADMIN: "ADMIN",
-};
-
-export const TECHNICIAN_LEVELS = {
-  JUNIOR: { display: "Repair Soldier" },
-  SENIOR: { display: "Repair Sergeant" },
-  EXPERT: { display: "Repair Commander" },
-  MASTER: { display: "Repair General" },
-};
 
 // ——— SMS (Aakash) ———
 // Placeholders: {{customerName}}, {{qrToken}}, {{date}}. Override via SMS_INTAKE_MESSAGE, SMS_REPAIRED_MESSAGE, SMS_UNREPAIRABLE_MESSAGE in .env
@@ -94,6 +48,9 @@ export function formatSmsMessage(template, data = {}) {
   return out;
 }
 
+// ——— Charges ———
+export const FRONTDESK_CHARGE = Number(process.env.FRONTDESK_CHARGE) || 100;
+
 // ——— QR label (repair item) ———
 // Paper size, QR size, logo size, name font size. Override via .env for thermal/label printers.
 export const QR_LABEL = {
@@ -103,3 +60,4 @@ export const QR_LABEL = {
   logoSizeMm: Number(process.env.QR_LABEL_LOGO_SIZE_MM) || 12,
   nameFontSizePt: Number(process.env.QR_LABEL_NAME_FONT_SIZE_PT) || 6,
 };
+

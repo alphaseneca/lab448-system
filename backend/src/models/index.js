@@ -1,10 +1,9 @@
 import { Sequelize } from "sequelize";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { DATABASE_URL } from "../config.js";
 
 // Create Sequelize instance
-export const sequelize = new Sequelize(process.env.DATABASE_URL, {
+export const sequelize = new Sequelize(DATABASE_URL, {
+
   dialect: "postgres",
   logging: false,
   pool: {
@@ -16,35 +15,108 @@ export const sequelize = new Sequelize(process.env.DATABASE_URL, {
 });
 
 // Import models
-import Role from "./Role.js";
-import User from "./User.js";
-import Customer from "./Customer.js";
-import DeviceCategory from "./DeviceCategory.js";
-import Device from "./Device.js";
-import Repair from "./Repair.js";
-import RepairCategory from "./RepairCategory.js";
-import QrDailySequence from "./QrDailySequence.js";
-import Inventory from "./Inventory.js";
-import InventoryUsage from "./InventoryUsage.js";
-import RepairCharge from "./RepairCharge.js";
-import Payment from "./Payment.js";
-import AuditLog from "./AuditLog.js";
+// Domain 1: IAM
+import Role from "./iam/Role.js";
+import Permission from "./iam/Permission.js";
+import RolePermission from "./iam/RolePermission.js";
+import StaffMember from "./iam/StaffMember.js";
+
+// Domain 2: Customer
+import Customer from "./customer/Customer.js";
+import CustomerAddress from "./customer/CustomerAddress.js";
+import CustomerAuth from "./customer/CustomerAuth.js";
+import RepairDeviceType from "./customer/RepairDeviceType.js";
+import CustomerDevice from "./customer/CustomerDevice.js";
+
+// Domain 3: Service Catalog
+import RepairServiceType from "./service_catalog/RepairServiceType.js";
+
+// Domain 4: Repair Workflow
+import RepairOrder from "./repair_workflow/RepairOrder.js";
+import RepairStatusLog from "./repair_workflow/RepairStatusLog.js";
+import TechnicianWorkLog from "./repair_workflow/TechnicianWorkLog.js";
+
+// Domain 5: Invoicing
+import Invoice from "./invoicing/Invoice.js";
+import ChargeType from "./invoicing/ChargeType.js";
+import InvoiceItem from "./invoicing/InvoiceItem.js";
+import Payment from "./invoicing/Payment.js";
+
+// Domain 6: Inventory
+import Supplier from "./inventory/Supplier.js";
+import PartLocation from "./inventory/PartLocation.js";
+import RepairPartCatalog from "./inventory/RepairPartCatalog.js";
+import RepairPartUsed from "./inventory/RepairPartUsed.js";
+import StockMovement from "./inventory/StockMovement.js";
+import PurchaseOrder from "./inventory/PurchaseOrder.js";
+import PurchaseOrderItem from "./inventory/PurchaseOrderItem.js";
+
+// Domain 7: Media Attachments
+import MediaAttachment from "./media_attachments/MediaAttachment.js";
+
+// Domain 8: Communications
+import MessageTemplate from "./communications/MessageTemplate.js";
+import WhatsappConversation from "./communications/WhatsappConversation.js";
+import CommunicationLog from "./communications/CommunicationLog.js";
+
+// Domain 9: System
+import RefCounter from "./system/RefCounter.js";
+import AuditEvent from "./system/AuditEvent.js";
+
+// Domain 10: Subscriptions
+import SubscriptionPlan from "./subscriptions/SubscriptionPlan.js";
+import CustomerSubscription from "./subscriptions/CustomerSubscription.js";
+import SubscriptionVisitLog from "./subscriptions/SubscriptionVisitLog.js";
+import SubscriptionVisitStaff from "./subscriptions/SubscriptionVisitStaff.js";
+import SubscriptionVisitFinding from "./subscriptions/SubscriptionVisitFinding.js";
+
 
 // Initialize models
 const models = {
   Role: Role(sequelize),
-  User: User(sequelize),
+  Permission: Permission(sequelize),
+  RolePermission: RolePermission(sequelize),
+  StaffMember: StaffMember(sequelize),
+
   Customer: Customer(sequelize),
-  DeviceCategory: DeviceCategory(sequelize),
-  Device: Device(sequelize),
-  Repair: Repair(sequelize),
-  RepairCategory: RepairCategory(sequelize),
-  QrDailySequence: QrDailySequence(sequelize),
-  Inventory: Inventory(sequelize),
-  InventoryUsage: InventoryUsage(sequelize),
-  RepairCharge: RepairCharge(sequelize),
+  CustomerAddress: CustomerAddress(sequelize),
+  CustomerAuth: CustomerAuth(sequelize),
+  RepairDeviceType: RepairDeviceType(sequelize),
+  CustomerDevice: CustomerDevice(sequelize),
+
+  RepairServiceType: RepairServiceType(sequelize),
+
+  RepairOrder: RepairOrder(sequelize),
+  RepairStatusLog: RepairStatusLog(sequelize),
+  TechnicianWorkLog: TechnicianWorkLog(sequelize),
+
+  Invoice: Invoice(sequelize),
+  ChargeType: ChargeType(sequelize),
+  InvoiceItem: InvoiceItem(sequelize),
   Payment: Payment(sequelize),
-  AuditLog: AuditLog(sequelize),
+
+  Supplier: Supplier(sequelize),
+  PartLocation: PartLocation(sequelize),
+  RepairPartCatalog: RepairPartCatalog(sequelize),
+  RepairPartUsed: RepairPartUsed(sequelize),
+  StockMovement: StockMovement(sequelize),
+  PurchaseOrder: PurchaseOrder(sequelize),
+  PurchaseOrderItem: PurchaseOrderItem(sequelize),
+
+  MediaAttachment: MediaAttachment(sequelize),
+
+  MessageTemplate: MessageTemplate(sequelize),
+  WhatsappConversation: WhatsappConversation(sequelize),
+  CommunicationLog: CommunicationLog(sequelize),
+
+  RefCounter: RefCounter(sequelize),
+  AuditEvent: AuditEvent(sequelize),
+
+  SubscriptionPlan: SubscriptionPlan(sequelize),
+  CustomerSubscription: CustomerSubscription(sequelize),
+  SubscriptionVisitLog: SubscriptionVisitLog(sequelize),
+  SubscriptionVisitStaff: SubscriptionVisitStaff(sequelize),
+  SubscriptionVisitFinding: SubscriptionVisitFinding(sequelize),
 };
 
 // Define associations
