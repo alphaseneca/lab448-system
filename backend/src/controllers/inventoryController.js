@@ -83,9 +83,11 @@ export const createPart = async (req, res) => {
        await models.StockMovement.create({
          partId: part.id,
          movementType: STOCK_MOVEMENT_TYPES.IN,
-         quantity: initialQty,
+         quantityChange: initialQty,
+         quantityAfter: Number(part.availableQuantity || 0),
          referenceId: `INIT-${part.id}`,
-         performedById: req.user.id,
+         referenceType: "INITIAL_STOCK",
+         recordedById: req.user.id,
          notes: "Initial stock entry",
        }, { transaction: t });
     }
@@ -124,8 +126,9 @@ export const addStock = async (req, res) => {
     await models.StockMovement.create({
       partId: part.id,
       movementType: STOCK_MOVEMENT_TYPES.IN,
-      quantity,
-      performedById: req.user.id,
+      quantityChange: Number(quantity),
+      quantityAfter: Number(part.availableQuantity || 0),
+      recordedById: req.user.id,
       notes,
     }, { transaction: t });
 
