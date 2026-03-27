@@ -100,6 +100,41 @@ const IntakePage = () => {
     setCustomerDropdownOpen(false);
   }, []);
 
+  const toGoogleMapsPlaceUrl = useCallback((addressOrPin) => {
+    const raw = (addressOrPin || "").toString().trim();
+    if (!raw) return "";
+    if (/^https?:\/\/(www\.)?google\.com\/maps\/place\//i.test(raw)) return raw;
+    return `https://www.google.com/maps/place/${encodeURIComponent(raw)}`;
+  }, []);
+
+  const copyMapsLink = useCallback(async (e, addressOrPin) => {
+    e.stopPropagation();
+    const mapsUrl = toGoogleMapsPlaceUrl(addressOrPin);
+    if (!mapsUrl) {
+      alert("No maps pin/address available for this customer");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(mapsUrl);
+      alert("Maps link copied");
+    } catch {
+      try {
+        const area = document.createElement("textarea");
+        area.value = mapsUrl;
+        area.style.position = "fixed";
+        area.style.left = "-9999px";
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        document.execCommand("copy");
+        document.body.removeChild(area);
+        alert("Maps link copied");
+      } catch {
+        alert(`Copy failed. Link: ${mapsUrl}`);
+      }
+    }
+  }, [toGoogleMapsPlaceUrl]);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (customerSearchRef.current && !customerSearchRef.current.contains(e.target)) {
@@ -404,8 +439,31 @@ const IntakePage = () => {
                       onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(124, 92, 255, 0.15)"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                     >
-                      <div style={{ fontWeight: 500 }}>{c.name}</div>
-                      <div className="small muted">{[c.phone, c.phone2, c.email, c.address].filter(Boolean).join(" · ") || "—"}</div>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 500 }}>{c.name}</div>
+                          <div className="small muted" style={{ wordBreak: "break-word" }}>
+                            {[c.phone, c.phone2, c.email, c.address].filter(Boolean).join(" · ") || "—"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => copyMapsLink(e, c.address)}
+                          title="Copy Google Maps link from address/pin"
+                          style={{
+                            flexShrink: 0,
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            background: "rgba(0,0,0,0.15)",
+                            color: "var(--text)",
+                            fontSize: "12px",
+                            padding: "4px 8px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Copy Maps
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
