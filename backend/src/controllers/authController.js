@@ -217,7 +217,7 @@ export const updateStaff = async (req, res) => {
     });
     if (!staff) return res.status(404).json({ message: "Staff not found" });
 
-    const { email, fullName, phone, roleId, technicianRank, isActive, lastKnownLat, lastKnownLng } = req.body;
+    const { email, fullName, phone, roleId, technicianRank, isActive, lastKnownLat, lastKnownLng, password } = req.body;
     
     // SAFETY: Prevent lockout. If demoting or deactivating an ADMIN, ensure another active ADMIN exists.
     if (staff.role?.code === ROLES.ADMIN) {
@@ -239,10 +239,17 @@ export const updateStaff = async (req, res) => {
       if (!role) return res.status(400).json({ message: "Invalid role specified" });
     }
 
+    let updatedPasswordHash = staff.passwordHash;
+    if (password && password.trim().length > 0) {
+      const salt = await bcrypt.genSalt(10);
+      updatedPasswordHash = await bcrypt.hash(password, salt);
+    }
+
     await staff.update({
       email: email !== undefined ? email : staff.email,
       fullName: fullName !== undefined ? fullName : staff.fullName,
       phone: phone !== undefined ? phone : staff.phone,
+      passwordHash: updatedPasswordHash,
       roleId: roleId !== undefined ? roleId : staff.roleId,
       technicianRank: technicianRank !== undefined ? technicianRank : staff.technicianRank,
       isActive: isActive !== undefined ? isActive : staff.isActive,

@@ -12,7 +12,7 @@ export default function LogisticsDashboard() {
         const overview = data?.inventory_overview || {};
         return [
           { label: 'Total Items', value: overview.total_items ?? 0, icon: '📦' },
-          { label: 'Inventory Value', value: `₹${Number(overview.total_value || 0).toFixed(2)}`, icon: '💎' },
+          { label: 'Inventory Value', value: `Rs. ${Number(overview.total_value || 0).toFixed(2)}`, icon: '💎' },
           { label: 'Low Stock Items', value: overview.low_stock_items?.length ?? 0, icon: '⚠️' },
           { label: 'Recent Usage', value: data?.recent_usages?.length ?? 0, icon: '🧾' },
         ];

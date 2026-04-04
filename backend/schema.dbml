@@ -92,6 +92,8 @@ Table customer_addresses {
   nearest_branch varchar
   latitude decimal(10,8)
   longitude decimal(11,8)
+  plus_code text [note: 'Google Maps share URL (https://maps.app.goo.gl/...) or Plus Code (e.g. 7JCW+2C Kathmandu)']
+  logistics_code varchar(50) [note: 'Internal logistics reference code for quick dispatch assignment (e.g. KTM-07, PKR-12)']
   is_default boolean [not null, default: false]
   created_at timestamptz [not null]
   updated_at timestamptz [not null]

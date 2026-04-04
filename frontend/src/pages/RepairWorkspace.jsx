@@ -3,14 +3,16 @@ import { useParams, useNavigate, NavLink } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { APP_ROUTES } from '../constants/routes';
-import { ALLOWED_STATUS_TRANSITIONS, REPAIR_STATUSES } from '../constants/constants';
+import { ALLOWED_STATUS_TRANSITIONS, REPAIR_STATUSES, PERMISSIONS, ROLES } from '../constants/constants';
 
 export default function RepairWorkspace() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [repair, setRepair] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [technicians, setTechnicians] = useState([]);
+  const [assigningTechnician, setAssigningTechnician] = useState(false);
 
   // Status Update state
   const [isUpdating, setIsUpdating] = useState(false);
@@ -30,6 +32,10 @@ export default function RepairWorkspace() {
   }, [id]);
 
   useEffect(() => {
+    fetchTechnicians();
+  }, []);
+
+  useEffect(() => {
     if (!repair?.status) return;
     const allowed = ALLOWED_STATUS_TRANSITIONS[repair.status] || [];
     setNextStatus(allowed[0] || '');
@@ -45,6 +51,28 @@ export default function RepairWorkspace() {
       navigate(APP_ROUTES.REPAIR_ORDERS_LIST);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTechnicians = async () => {
+    try {
+      const res = await api.get('/auth/staff');
+      const techs = res.data.filter(s => s.role?.code === ROLES.TECHNICIAN || s.role?.code === ROLES.ADMIN);
+      setTechnicians(techs);
+    } catch(err) {
+      console.error('Failed to load technicians', err);
+    }
+  };
+
+  const assignTechnician = async (techId) => {
+    setAssigningTechnician(true);
+    try {
+      await api.put(`/repair-orders/${id}`, { assignedToId: techId || null });
+      await fetchRepair();
+    } catch(err) {
+      alert('Failed to assign technician');
+    } finally {
+      setAssigningTechnician(false);
     }
   };
 
@@ -203,7 +231,20 @@ export default function RepairWorkspace() {
               <div className="grid grid-cols-2 gap-6 mt-6">
                 <div>
                   <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">Assigned Technician</label>
-                  <p className="font-semibold text-primary">{repair.assignedTo?.fullName || repair.assignedTo?.name || <span className="text-muted italic">Unassigned</span>}</p>
+                  {(user?.roleCode === ROLES.ADMIN || hasPermission(PERMISSIONS.REPAIR_EDIT)) ? (
+                    <select
+                      value={repair.assignedToId || repair.assignedTo?.id || ''}
+                      onChange={(e) => assignTechnician(e.target.value)}
+                      disabled={assigningTechnician}
+                    >
+                      <option value="">-- Unassigned --</option>
+                      {technicians.map(t => (
+                        <option key={t.id} value={t.id}>{t.fullName}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="font-semibold text-primary">{repair.assignedTo?.fullName || repair.assignedTo?.name || <span className="text-muted italic">Unassigned</span>}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-bold text-muted uppercase tracking-wider mb-1 block">Intake Date</label>
@@ -319,7 +360,7 @@ export default function RepairWorkspace() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted">Total</span>
-                    <span className="font-semibold">₹{Number(invoice.totalAmount || 0).toFixed(2)}</span>
+                    <span className="font-semibold">Rs. {Number(invoice.totalAmount || 0).toFixed(2)}</span>
                   </div>
 
                   {!invoice.isLocked && (

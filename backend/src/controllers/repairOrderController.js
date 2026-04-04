@@ -8,47 +8,36 @@ import { FRONTDESK_CHARGE } from "../config.js";
 // =====================================
 
 const generateNextTicketNumber = async (transaction) => {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yymmdd = `${yy}${mm}${dd}`;
+  const targetPrefix = `LAB${yymmdd}`;
+
   const counterType = REF_COUNTER_TYPES.REPAIR_ORDER;
   const [counter] = await models.RefCounter.findOrCreate({
     where: { counterType },
     defaults: {
       counterType,
-      prefix: "RO",
-      lastValue: 0,
-      padLength: 6,
-    },
-    transaction,
-  });
-
-  counter.lastValue = Number(counter.lastValue || 0) + 1;
-  await counter.save({ transaction });
-
-  const padded = String(counter.lastValue).padStart(counter.padLength || 6, "0");
-  return `${counter.prefix}-${padded}`;
-};
-
-const generateNextQrToken = async (transaction) => {
-  const year = new Date().getFullYear();
-  const [counter] = await models.RefCounter.findOrCreate({
-    where: { counterType: REF_COUNTER_TYPES.QR_TOKEN },
-    defaults: {
-      counterType: REF_COUNTER_TYPES.QR_TOKEN,
-      prefix: `LAB448${year}`,
+      prefix: targetPrefix,
       lastValue: 0,
       padLength: 4,
     },
     transaction,
   });
 
-  if (!String(counter.prefix).startsWith(`LAB448${year}`)) {
-    counter.prefix = `LAB448${year}`;
+  if (counter.prefix !== targetPrefix) {
+    counter.prefix = targetPrefix;
     counter.lastValue = 0;
   }
 
   counter.lastValue = Number(counter.lastValue || 0) + 1;
   await counter.save({ transaction });
+
   return `${counter.prefix}${String(counter.lastValue).padStart(counter.padLength || 4, "0")}`;
 };
+
 
 export const listRepairOrders = async (req, res) => {
   try {
@@ -115,7 +104,7 @@ export const getRepairById = async (req, res) => {
 export const getRepairByToken = async (req, res) => {
   try {
     const repair = await models.RepairOrder.findOne({
-      where: { qrToken: req.params.token },
+      where: { ticketNumber: req.params.token },
       include: [
         { model: models.CustomerDevice, as: "device" },
         { model: models.Customer, as: "customer" },
@@ -126,10 +115,7 @@ export const getRepairByToken = async (req, res) => {
       return res.status(404).json({ message: "Repair token not found" });
     }
     
-    // Auth Check: Can this technician see it?
-    if (req.user.roleCode === ROLES.TECHNICIAN && repair.assignedTo && repair.assignedTo !== req.user.id) {
-       return res.status(403).json({ message: "This repair is assigned to a different technician" });
-    }
+    // Auth check removed to allow "pulling" from other technicians
 
     res.json(repair);
   } catch (err) {
@@ -143,7 +129,7 @@ export const createRepairOrder = async (req, res) => {
     customerId, deviceId, device, serviceTypeId, priority,
     intakeNotes, internalNotes,
     hasDelivery, pickupAddressId, deliveryAddressId, pickupScheduledAt, deliveryScheduledAt,
-    expectedCompletionAt, qrToken, subscriptionId, subscriptionVisitId, repairLocation, intakeSource, defaultServiceCharge
+    expectedCompletionAt, subscriptionId, subscriptionVisitId, repairLocation, intakeSource, defaultServiceCharge
   } = req.body;
 
   if (!customerId || (!deviceId && !device)) {
@@ -166,7 +152,6 @@ export const createRepairOrder = async (req, res) => {
     }
 
     const ticketNumber = await generateNextTicketNumber(t);
-    const generatedQrToken = qrToken || await generateNextQrToken(t);
     const serviceType = serviceTypeId
       ? await models.RepairServiceType.findByPk(serviceTypeId, { transaction: t })
       : null;
@@ -203,7 +188,6 @@ export const createRepairOrder = async (req, res) => {
       pickupScheduledAt: pickupScheduledAt || null,
       deliveryScheduledAt: deliveryScheduledAt || null,
       estimatedCompletionAt: expectedCompletionAt || null,
-      qrToken: generatedQrToken,
       defaultServiceCharge: computedServiceCharge,
       subscriptionId: subscriptionId || null,
       subscriptionVisitId: subscriptionVisitId || null,
@@ -255,7 +239,7 @@ export const transitionRepairStatus = async (req, res) => {
     }
 
     const oldStatus = repair.status;
-    if (oldStatus === newStatus) {
+    if (oldStatus === newStatus && newStatus !== REPAIR_STATUSES.IN_REPAIR) {
        await t.rollback();
        return res.json(repair); // No change
     }
@@ -270,8 +254,8 @@ export const transitionRepairStatus = async (req, res) => {
       });
     }
 
-    // Assigning the repairing tech logic. If transitioning to IN_REPAIR, and no one is assigned, assign to req.user.
-    if (newStatus === REPAIR_STATUSES.IN_REPAIR && !repair.assignedToId) {
+    // Assigning the repairing tech logic. Force assignment to the user initiating IN_REPAIR.
+    if (newStatus === REPAIR_STATUSES.IN_REPAIR) {
       repair.assignedToId = req.user.id;
     }
     
@@ -395,3 +379,5 @@ export const deleteRepairOrder = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+

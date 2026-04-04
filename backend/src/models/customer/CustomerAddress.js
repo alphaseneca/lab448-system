@@ -42,6 +42,18 @@ export default (sequelize) => {
         type: DataTypes.DECIMAL(11, 8),
         allowNull: true,
       },
+      plusCode: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "plus_code",
+        comment: "Google Maps share URL or Plus Code for this address",
+      },
+      logisticsCode: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: "logistics_code",
+        comment: "Internal logistics reference code for this address (e.g. KTM-07, PKR-12)",
+      },
       isDefault: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

@@ -1,6 +1,6 @@
 # QR Token Format (Human-Readable)
 
-Each repair gets a unique **QR token** stored in `repairs.qr_token`. It is used for QR scanning and manual lookup (`GET /repairs/by-qr/:token`).
+Each repair gets a unique **QR token** stored natively as the primary `repair_orders.ticket_number`. It is used natively for QR scanning and manual lookup flows (`GET /repairs/by-qr/:token`).
 
 ## Format
 
@@ -16,25 +16,25 @@ Each repair gets a unique **QR token** stored in `repairs.qr_token`. It is used 
 ## Date
 
 - **Source**: The date is derived from the **backend server** when the intake request is processed: `new Date()` then format as YYMMDD (year, month, date from server local time). No client-supplied date is used.
-- **Implementation**: In `generateQrToken(transaction)` in `src/routes/repairs.js`, the date key is built from `d.getFullYear()`, `d.getMonth() + 1`, `d.getDate()` with zero-padding.
+- **Implementation**: In `generateNextTicketNumber(transaction)` in `src/controllers/repairOrderController.js`, the date key is built from `d.getFullYear()`, `d.getMonth() + 1`, `d.getDate()` with zero-padding.
 
 ## Daily sequence
 
-- **Storage**: Table `qr_daily_sequences` with columns `date_key` (PK, YYMMDD) and `last_value` (integer).
+- **Storage**: The `ref_counters` table manages sequences.
 - **Behaviour**: For each intake, the backend gets or creates the row for today’s `date_key`, locks it, increments `last_value` by 1, and uses that value (zero-padded to 4 digits) in the token. The sequence resets each new day (new date key).
 - **Concurrency**: Row locking inside the same transaction as repair creation ensures unique tokens under concurrent intakes.
 
 ## Legacy tokens
 
-- Older or previously generated tokens (e.g. random format) may no longer be valid if not present in the DB. Lookup is by exact match on `qr_token`; only tokens stored in `repairs` work.
+- Older or previously generated tokens (e.g. random format) may no longer be valid if not present in the DB. Lookup is by exact match on `ticket_number`; only tokens stored in `repair_orders` work.
 
 ## Frontend: showing the QR code
 
-- **Queue page**: Click a repair’s QR token in the table to open a modal that shows the actual scannable QR code (and the token text).
-- **Repair workspace**: The Customer card shows the token and a scannable QR code image below it.
+- **Queue page**: Click a repair's ticket number in the table to open a modal that shows the actual scannable QR code (and the token text).
+- **Repair workspace**: The Customer card shows the ticket number and a scannable QR code image below it.
+- **Intake Flow**: The intake success screen creates a barcode automatically via `<QRCodeSVG value={createdRepair.ticketNumber} />`.
 
 ## Code references
 
-- **Model**: `backend/src/models/QrDailySequence.js`
-- **Generator**: `generateQrToken(transaction)` in `backend/src/routes/repairs.js` (called inside the intake transaction).
-- **Schema**: Run `npm run db:sync` so the table `qr_daily_sequences` exists.
+- **Generator**: `generateNextTicketNumber(transaction)` in `backend/src/controllers/repairOrderController.js` (called inside the intake transaction).
+- **Lookup Router**: `/api/v2/repair-workflow/by-qr/:token` seamlessly maps `:token` string directly to `where: { ticketNumber }`.

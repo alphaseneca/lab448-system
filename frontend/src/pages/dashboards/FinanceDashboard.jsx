@@ -11,9 +11,9 @@ export default function FinanceDashboard() {
       metricsBuilder={(data) => {
         const month = data?.current_month || {};
         return [
-          { label: 'Today Collections', value: `₹${Number(data?.today_collections || 0).toFixed(2)}`, icon: '📅' },
-          { label: 'Month Revenue', value: `₹${Number(month.total_revenue || 0).toFixed(2)}`, icon: '📊' },
-          { label: 'Outstanding', value: `₹${Number(month.outstanding_payments || 0).toFixed(2)}`, icon: '⏳' },
+          { label: 'Today Collections', value: `Rs. ${Number(data?.today_collections || 0).toFixed(2)}`, icon: '📅' },
+          { label: 'Month Revenue', value: `Rs. ${Number(month.total_revenue || 0).toFixed(2)}`, icon: '📊' },
+          { label: 'Outstanding', value: `Rs. ${Number(month.outstanding_payments || 0).toFixed(2)}`, icon: '⏳' },
           { label: 'Recent Payments', value: data?.recent_payments?.length ?? 0, icon: '💳' },
         ];
       }}

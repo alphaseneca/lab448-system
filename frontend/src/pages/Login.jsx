@@ -18,7 +18,22 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to login. Please check your credentials.');
+      const status = err.response?.status;
+      const serverMsg = err.response?.data?.message;
+
+      if (!err.response) {
+        // Network failure — proxy got no response from backend
+        setError('Cannot reach the server. The backend may be offline or the network is unavailable.');
+      } else if (status === 401 || status === 403) {
+        setError(serverMsg || 'Invalid email or password.');
+      } else if (status >= 500) {
+        setError(serverMsg
+          ? `Server error: ${serverMsg}`
+          : `Server error (${status}). The backend returned an unexpected error.`
+        );
+      } else {
+        setError(serverMsg || `Unexpected error (${status}). Please try again.`);
+      }
     } finally {
       setIsSubmitting(false);
     }

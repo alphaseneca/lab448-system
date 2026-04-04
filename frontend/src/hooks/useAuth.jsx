@@ -3,15 +3,6 @@ import { api } from '../services/api';
 import { PERMISSIONS, ROLES } from '../constants/constants';
 
 const AuthContext = createContext(null);
-const PERMISSION_MAP = {
-  MANAGE_STAFF: PERMISSIONS.MANAGE_STAFF,
-  REPAIR_VIEW: PERMISSIONS.REPAIR_VIEW,
-  INTAKE_REPAIR: PERMISSIONS.REPAIR_CREATE,
-  MANAGE_BILLING: PERMISSIONS.MANAGE_BILLING,
-  TAKE_PAYMENT: PERMISSIONS.MANAGE_BILLING,
-  MANAGE_INVENTORY: PERMISSIONS.INVENTORY_MANAGE,
-  VIEW_DASHBOARD: PERMISSIONS.VIEW_DASHBOARD,
-};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -19,33 +10,19 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const storedUser = localStorage.getItem('user');
       const token = localStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;
       }
-
+      const storedUser = localStorage.getItem('user');
       if (storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch (_e) {
-          localStorage.removeItem('user');
-        }
+        try { setUser(JSON.parse(storedUser)); } catch (_) {}
       }
-
       try {
         const res = await api.get('/auth/me');
         const me = res.data;
-        const normalizedUser = {
-          id: me.id,
-          fullName: me.fullName || me.name,
-          email: me.email,
-          roleId: me.roleId,
-          roleName: me.role?.name,
-          roleCode: me.role?.code,
-          permissions: Array.isArray(me.role?.permissions) ? me.role.permissions.map((p) => p.code) : [],
-        };
+        const normalizedUser = normalizeUser(me);
         localStorage.setItem('user', JSON.stringify(normalizedUser));
         setUser(normalizedUser);
       } catch (_err) {
@@ -56,17 +33,27 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
       }
     };
-
     initializeAuth();
   }, []);
+
+  const normalizeUser = (userData) => ({
+    id: userData.id,
+    fullName: userData.fullName || userData.name,
+    email: userData.email,
+    roleId: userData.roleId,
+    roleName: userData.role?.name,
+    roleCode: userData.role?.code || userData.roleCode,
+    commissionRate: userData.commissionRate,
+    technicianRank: userData.technicianRank,
+    permissions: Array.isArray(userData.role?.permissions)
+      ? userData.role.permissions.map((p) => (typeof p === 'string' ? p : p.code))
+      : (userData.permissions || []),
+  });
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     const { token, user: userData } = res.data;
-    const normalizedUser = {
-      ...userData,
-      fullName: userData.fullName || userData.name,
-    };
+    const normalizedUser = normalizeUser({ ...userData, role: userData.role });
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(normalizedUser));
     setUser(normalizedUser);
@@ -79,17 +66,27 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const isAdmin = () =>
+    user?.roleCode === ROLES.ADMIN || user?.permissions?.includes('*:*');
+
+  /**
+   * hasPermission(permissionCode) — accepts both raw codes ('billing:manage')
+   * and PERMISSION constant keys ('MANAGE_BILLING') for convenience.
+   */
   const hasPermission = (permission) => {
-    const code = PERMISSION_MAP[permission] || permission;
-    return user?.roleCode === ROLES.ADMIN || user?.permissions?.includes(code) || user?.permissions?.includes('*:*');
+    if (!user) return false;
+    if (isAdmin()) return true;
+    // Accept either a raw code or a key from the PERMISSIONS object
+    const code = PERMISSIONS[permission] || permission;
+    return user.permissions?.includes(code) || user.permissions?.includes('*:*');
   };
 
   const hasRole = (roleCode) => {
-    return user?.roleCode === roleCode || user?.roleCode === ROLES.ADMIN;
+    return user?.roleCode === roleCode || isAdmin();
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission, hasRole }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, hasPermission, hasRole }}>
       {children}
     </AuthContext.Provider>
   );

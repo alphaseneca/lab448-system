@@ -79,9 +79,20 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.15);
 }
 
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 16px;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
 select option {
   background: var(--bg-secondary);
   color: var(--text-primary);
+  padding: 10px;
 }
 
 /* Ensure native number controls are subtle in dark UI */
@@ -95,18 +106,74 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 *::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(0, 174, 239, 0.35);
+  background: rgba(0, 174, 239, 0.3);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 174, 239, 0.5);
+  background: rgba(0, 174, 239, 0.55);
+}
+
+/* ── Dropdown / Autocomplete Menu ─────────────────────────────────────── */
+/* Shared class for all floating suggestion lists, brand pickers, etc. */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: #0d1e35; /* solid — never transparent */
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 174, 239, 0.08);
+  max-height: 220px;
+  overflow-y: auto;
+  /* Custom scrollbar inside dropdown */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 174, 239, 0.35) transparent;
+}
+
+.dropdown-menu::-webkit-scrollbar { width: 4px; }
+.dropdown-menu::-webkit-scrollbar-track { background: transparent; }
+.dropdown-menu::-webkit-scrollbar-thumb {
+  background: rgba(0, 174, 239, 0.35);
+  border-radius: 999px;
+}
+
+.dropdown-menu li {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background 0.15s ease;
+}
+
+.dropdown-menu li:hover,
+.dropdown-menu li:focus {
+  background: rgba(0, 174, 239, 0.1);
+  color: #fff;
+  outline: none;
+}
+
+.dropdown-menu li.dropdown-item-muted {
+  color: var(--text-muted);
+  font-style: italic;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 2px;
+}
+
+.dropdown-menu li.dropdown-item-muted:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
 }
 
 .btn {
@@ -320,3 +387,28 @@ tbody tr:hover {
 .icon-sm { font-size: 18px; }
 .icon-md { font-size: 24px; }
 .icon-lg { font-size: 32px; }
+
+/* Slide Animation for Modals */
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Slim scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}

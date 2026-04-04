@@ -76,7 +76,7 @@ export const createCustomer = async (req, res) => {
       notes: notes || null
     });
 
-    if (primaryAddress && (primaryAddress.addressLine || primaryAddress.latitude || primaryAddress.longitude)) {
+    if (primaryAddress && (primaryAddress.addressLine || primaryAddress.latitude || primaryAddress.longitude || primaryAddress.plusCode || primaryAddress.logisticsCode)) {
       await models.CustomerAddress.create({
         customerId: customer.id,
         label: primaryAddress.label || "Primary",
@@ -85,6 +85,8 @@ export const createCustomer = async (req, res) => {
         nearestBranch: primaryAddress.nearestBranch || null,
         latitude: primaryAddress.latitude || null,
         longitude: primaryAddress.longitude || null,
+        plusCode: primaryAddress.plusCode || null,
+        logisticsCode: primaryAddress.logisticsCode || null,
         isDefault: true,
       });
     }
@@ -185,7 +187,7 @@ export const deleteCustomer = async (req, res) => {
 
 export const addCustomerAddress = async (req, res) => {
   const { customerId } = req.params;
-  const { label, addressLine, cityDistrict, nearestBranch, latitude, longitude, isDefault } = req.body;
+  const { label, addressLine, cityDistrict, nearestBranch, latitude, longitude, plusCode, logisticsCode, isDefault } = req.body;
 
   if (!label) return res.status(400).json({ message: "Address label is required" });
 
@@ -206,6 +208,8 @@ export const addCustomerAddress = async (req, res) => {
       nearestBranch: nearestBranch || null,
       latitude: latitude || null,
       longitude: longitude || null,
+      plusCode: plusCode || null,
+      logisticsCode: logisticsCode || null,
       isDefault: isDefault || false
     });
 
@@ -221,7 +225,7 @@ export const updateCustomerAddress = async (req, res) => {
     const address = await models.CustomerAddress.findByPk(req.params.addressId);
     if (!address) return res.status(404).json({ message: "Address not found" });
 
-    const { label, addressLine, cityDistrict, nearestBranch, latitude, longitude, isDefault } = req.body;
+    const { label, addressLine, cityDistrict, nearestBranch, latitude, longitude, plusCode, logisticsCode, isDefault } = req.body;
 
     if (isDefault && !address.isDefault) {
       await models.CustomerAddress.update({ isDefault: false }, { where: { customerId: address.customerId } });
@@ -234,6 +238,8 @@ export const updateCustomerAddress = async (req, res) => {
       nearestBranch: nearestBranch !== undefined ? nearestBranch : address.nearestBranch,
       latitude: latitude !== undefined ? latitude : address.latitude,
       longitude: longitude !== undefined ? longitude : address.longitude,
+      plusCode: plusCode !== undefined ? plusCode : address.plusCode,
+      logisticsCode: logisticsCode !== undefined ? logisticsCode : address.logisticsCode,
       isDefault: isDefault !== undefined ? isDefault : address.isDefault
     });
 

@@ -15,7 +15,7 @@ export default function FrontDeskDashboard() {
           { label: 'New Intakes', value: today.new_intakes ?? 0, icon: '📥' },
           { label: 'Pending Deliveries', value: today.pending_deliveries ?? 0, icon: '📦' },
           { label: 'Customers Served', value: today.total_customers_served ?? 0, icon: '👤' },
-          { label: 'Month Revenue', value: `₹${Number(month.revenue_collected || 0).toFixed(2)}`, icon: '💰' },
+          { label: 'Month Revenue', value: `Rs. ${Number(month.revenue_collected || 0).toFixed(2)}`, icon: '💰' },
         ];
       }}
       actions={[

@@ -180,11 +180,11 @@ export default function CustomerDetailPage() {
             
             <div className="flex justify-between items-center mb-3">
               <span className="text-muted text-sm font-medium">Lifetime Billed</span>
-              <span className="font-bold text-lg">₹{Number(summary.totalBilled).toFixed(2)}</span>
+              <span className="font-bold text-lg">Rs. {Number(summary.totalBilled).toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-4 pb-4 border-b border-panel">
               <span className="text-muted text-sm font-medium">Lifetime Paid</span>
-              <span className="font-bold text-lg text-success">-₹{Number(summary.totalPaid).toFixed(2)}</span>
+              <span className="font-bold text-lg text-success">-Rs. {Number(summary.totalPaid).toFixed(2)}</span>
             </div>
             
             <div className={`p-4 rounded-md border text-center ${balanceDue > 0 ? 'bg-warning-bg border-warning/30 text-warning' : 'bg-success-bg border-success/30 text-success'}`}>
@@ -192,7 +192,7 @@ export default function CustomerDetailPage() {
                 {balanceDue > 0 ? 'Outstanding Balance' : 'Account Settled'}
               </div>
               <div className="font-extrabold text-3xl">
-                ₹{Math.max(0, balanceDue).toFixed(2)}
+                Rs. {Math.max(0, balanceDue).toFixed(2)}
               </div>
             </div>
           </div>
@@ -208,7 +208,7 @@ export default function CustomerDetailPage() {
 
               <div className="flex flex-col gap-4">
                 <div>
-                  <label className="text-xs font-bold text-secondary mb-1 block">Amount (₹)</label>
+                  <label className="text-xs font-bold text-secondary mb-1 block">Amount (Rs. )</label>
                   <input type="number" step="0.01" max={balanceDue} value={payment.amount} onChange={e => setPayment({...payment, amount: e.target.value})} placeholder="0.00" required />
                 </div>
                 <div>
@@ -264,9 +264,9 @@ export default function CustomerDetailPage() {
                           <span className="badge badge-neutral text-xs">{item.status}</span>
                        </td>
                        <td className="py-3 px-4 text-right">
-                         <div className="font-bold">₹{Number(item.total).toFixed(2)}</div>
+                         <div className="font-bold">Rs. {Number(item.total).toFixed(2)}</div>
                          {item.due > 0 ? (
-                            <div className="text-xs text-warning font-bold">Due: ₹{Number(item.due).toFixed(2)}</div>
+                            <div className="text-xs text-warning font-bold">Due: Rs. {Number(item.due).toFixed(2)}</div>
                          ) : (
                             <div className="text-xs text-success font-bold">Paid</div>
                          )}

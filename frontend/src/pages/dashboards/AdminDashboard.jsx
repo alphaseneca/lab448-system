@@ -13,7 +13,7 @@ export default function AdminDashboard() {
         return [
           { label: 'Total Repair Orders', value: sys.total_repairs ?? 0, icon: '🔧' },
           { label: 'Active Users', value: sys.active_users ?? 0, icon: '👥' },
-          { label: 'Revenue', value: `₹${Number(sys.total_revenue || 0).toFixed(2)}`, icon: '💰' },
+          { label: 'Revenue', value: `Rs. ${Number(sys.total_revenue || 0).toFixed(2)}`, icon: '💰' },
           { label: 'Roles Configured', value: data?.configuration_status?.roles_configured ?? 0, icon: '🛡️' },
         ];
       }}
