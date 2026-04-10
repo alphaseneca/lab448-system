@@ -14,7 +14,9 @@ const StatCard = ({ label, value, icon, gradient }) => (
     }}
   >
     <div style={{ position: "relative", zIndex: 1 }}>
-      <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.9 }}>{icon}</div>
+      <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.9 }}>
+        {icon}
+      </div>
       <div
         className="small muted"
         style={{
@@ -26,7 +28,14 @@ const StatCard = ({ label, value, icon, gradient }) => (
       >
         {label}
       </div>
-      <div style={{ marginTop: "8px", fontSize: "28px", fontWeight: 700, color: "#fff" }}>
+      <div
+        style={{
+          marginTop: "8px",
+          fontSize: "28px",
+          fontWeight: 700,
+          color: "#fff",
+        }}
+      >
         {value}
       </div>
     </div>
@@ -41,7 +50,7 @@ const FrontDeskDashboard = () => {
   const { user, hasRole } = useAuth();
 
   // Permission checks for frontdesk features
-  const isFrontDeskUser = hasRole('FRONT_DESK') || hasRole('ADMIN');
+  const isFrontDeskUser = hasRole("FRONT_DESK") || hasRole("ADMIN");
   const canAccessIntake = isFrontDeskUser;
   const canScanQR = isFrontDeskUser;
   const canManageDeliveries = isFrontDeskUser;
@@ -52,13 +61,16 @@ const FrontDeskDashboard = () => {
   useEffect(() => {
     // Check if user has proper role access
     if (!isFrontDeskUser) {
-      setError("Access denied. You need FRONT_DESK role to access this dashboard.");
+      setError(
+        "Access denied. You need FRONT_DESK role to access this dashboard.",
+      );
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    api.get("/dashboard/front-desk")
+    api
+      .get("/dashboard/front-desk")
       .then((r) => {
         setData(r.data);
         setError("");
@@ -67,12 +79,16 @@ const FrontDeskDashboard = () => {
         console.error("Dashboard error:", err);
 
         if (err.response?.status === 403) {
-          setError("Permission denied. Contact your administrator to enable Front Desk access.");
+          setError(
+            "Permission denied. Contact your administrator to enable Front Desk access.",
+          );
         } else if (err.response?.status === 401) {
           setError("Session expired. Please log in again.");
           setTimeout(() => navigate("/login"), 2000);
         } else {
-          setError(err.response?.data?.message || "Failed to load dashboard data");
+          setError(
+            err.response?.data?.message || "Failed to load dashboard data",
+          );
         }
       })
       .finally(() => {
@@ -113,20 +129,35 @@ const FrontDeskDashboard = () => {
   // If user doesn't have FRONT_DESK role
   if (!isFrontDeskUser) {
     return (
-      <div className="content" style={{ padding: "40px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: "64px", marginBottom: "24px", opacity: 0.3 }}>🚫</div>
+      <div
+        className="content"
+        style={{ padding: "40px 20px", textAlign: "center" }}
+      >
+        <div style={{ fontSize: "64px", marginBottom: "24px", opacity: 0.3 }}>
+          🚫
+        </div>
         <h2 style={{ marginBottom: "12px" }}>Access Restricted</h2>
-        <p className="muted" style={{ maxWidth: "500px", margin: "0 auto 24px" }}>
-          This dashboard is only available to users with <strong>FRONT_DESK</strong> role.
+        <p
+          className="muted"
+          style={{ maxWidth: "500px", margin: "0 auto 24px" }}
+        >
+          This dashboard is only available to users with{" "}
+          <strong>FRONT_DESK</strong> role.
         </p>
         <p className="small muted" style={{ marginBottom: "32px" }}>
-          Your current role: <strong>{user?.roleName || 'Unknown'}</strong>
+          Your current role: <strong>{user?.roleName || "Unknown"}</strong>
         </p>
         <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-          <button onClick={() => navigate("/dashboard")} className="btn btn-primary">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="btn btn-primary"
+          >
             Go to Main Dashboard
           </button>
-          <button onClick={() => navigate("/intake")} className="btn btn-secondary">
+          <button
+            onClick={() => navigate("/intake")}
+            className="btn btn-secondary"
+          >
             Go to Intake
           </button>
         </div>
@@ -137,12 +168,44 @@ const FrontDeskDashboard = () => {
   return (
     <div className="content dashboard-front-desk">
       <div style={{ marginBottom: "16px" }}>
-        <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>📋 Front Desk Dashboard</h2>
+        <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
+          📋 Front Desk Dashboard
+        </h2>
         <p className="muted small" style={{ marginTop: "4px" }}>
           Customer intake, deliveries, and payments
         </p>
         <div className="small muted" style={{ marginTop: "4px" }}>
           Welcome, <strong>{user?.name}</strong> ({user?.roleName})
+        </div>
+        <div className="card" style={{ marginTop: "24px" }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: "18px", fontWeight: 600 }}>
+            Quick Actions
+          </h3>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            {canAccessIntake && (
+              <Link to="/intake" style={{ textDecoration: "none" }}>
+                <button className="btn btn-primary">📥 New Intake</button>
+              </Link>
+            )}
+            {canScanQR && (
+              <Link to="/qr-scan" style={{ textDecoration: "none" }}>
+                <button className="btn btn-ghost">📷 Scan QR</button>
+              </Link>
+            )}
+            {canManageDeliveries && (
+              <Link
+                to="/queue?status=REPAIRED,UNREPAIRABLE"
+                style={{ textDecoration: "none" }}
+              >
+                <button className="btn btn-ghost">📦 Deliveries</button>
+              </Link>
+            )}
+            {canViewCustomers && (
+              <Link to="/customers" style={{ textDecoration: "none" }}>
+                <button className="btn btn-ghost">👤 Customers</button>
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -169,15 +232,17 @@ const FrontDeskDashboard = () => {
       {/* Loading State */}
       {loading && (
         <div style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div style={{
-            width: "50px",
-            height: "50px",
-            margin: "0 auto 16px",
-            border: "4px solid #f3f4f6",
-            borderTop: "4px solid #3b82f6",
-            borderRadius: "50%",
-            animation: "spin 1s linear infinite"
-          }}></div>
+          <div
+            style={{
+              width: "50px",
+              height: "50px",
+              margin: "0 auto 16px",
+              border: "4px solid #f3f4f6",
+              borderTop: "4px solid #3b82f6",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+            }}
+          ></div>
           <div className="muted">Loading dashboard data...</div>
         </div>
       )}
@@ -213,14 +278,31 @@ const FrontDeskDashboard = () => {
             <StatCard
               icon="💰"
               label="Month Revenue"
-              value={month.revenue_collected != null ? `₹${Number(month.revenue_collected).toFixed(2)}` : "₹0.00"}
+              value={
+                month.revenue_collected != null
+                  ? `₹${Number(month.revenue_collected).toFixed(2)}`
+                  : "₹0.00"
+              }
               gradient={["rgba(124, 92, 255, 0.25)", "rgba(96, 165, 250, 0.2)"]}
             />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginTop: "24px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "24px",
+              marginTop: "24px",
+            }}
+          >
             <div className="card">
-              <h3 style={{ margin: "0 0 16px", fontSize: "18px", fontWeight: 600 }}>
+              <h3
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: "18px",
+                  fontWeight: 600,
+                }}
+              >
                 Recent Repairs
               </h3>
               {recent.length === 0 ? (
@@ -239,12 +321,20 @@ const FrontDeskDashboard = () => {
                     <tbody>
                       {recent.slice(0, 10).map((r) => (
                         <tr key={r.id}>
-                          <td><code>{r.qrToken || r.id}</code></td>
+                          <td>
+                            <code>{r.qrToken || r.id}</code>
+                          </td>
                           <td>{r.customer?.name || "N/A"}</td>
-                          <td>{r.device?.brand || ""} {r.device?.model || ""}</td>
+                          <td>
+                            {r.device?.brand || ""} {r.device?.model || ""}
+                          </td>
                           <td>
                             {canViewRepairs ? (
-                              <Link to={`/repairs/${r.id}`} className="btn btn-ghost" style={{ fontSize: "12px", padding: "4px 8px" }}>
+                              <Link
+                                to={`/repairs/${r.id}`}
+                                className="btn btn-ghost"
+                                style={{ fontSize: "12px", padding: "4px 8px" }}
+                              >
                                 Open
                               </Link>
                             ) : null}
@@ -258,7 +348,13 @@ const FrontDeskDashboard = () => {
             </div>
 
             <div className="card">
-              <h3 style={{ margin: "0 0 16px", fontSize: "18px", fontWeight: 600 }}>
+              <h3
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: "18px",
+                  fontWeight: 600,
+                }}
+              >
                 Pending Payments
               </h3>
               {pending.length === 0 ? (
@@ -281,14 +377,19 @@ const FrontDeskDashboard = () => {
                         const tokens = c.qrTokens ?? [];
                         return (
                           <tr key={c.customerId ?? c.firstRepairId}>
-                            <td style={{ fontWeight: 500 }}>{c.customerName}</td>
+                            <td style={{ fontWeight: 500 }}>
+                              {c.customerName}
+                            </td>
                             <td className="small muted">
                               {itemCount} item{itemCount !== 1 ? "s" : ""}
                               {repairIds.length > 0 && repairIds.length <= 5
                                 ? repairIds.map((rid, idx) => (
                                     <span key={rid}>
                                       {idx > 0 ? ", " : " "}
-                                      <Link to={`/repairs/${rid}/billing`} style={{ color: "var(--accent)" }}>
+                                      <Link
+                                        to={`/repairs/${rid}/billing`}
+                                        style={{ color: "var(--accent)" }}
+                                      >
                                         {tokens[idx] ?? rid}
                                       </Link>
                                     </span>
@@ -300,7 +401,14 @@ const FrontDeskDashboard = () => {
                             <td>₹{Number(c.due).toFixed(2)}</td>
                             <td>
                               {canCollectPayments ? (
-                                <Link to={`/repairs/${c.firstRepairId}/billing`} className="btn btn-primary" style={{ fontSize: "12px", padding: "4px 8px" }}>
+                                <Link
+                                  to={`/repairs/${c.firstRepairId}/billing`}
+                                  className="btn btn-primary"
+                                  style={{
+                                    fontSize: "12px",
+                                    padding: "4px 8px",
+                                  }}
+                                >
                                   Collect
                                 </Link>
                               ) : null}
@@ -311,32 +419,6 @@ const FrontDeskDashboard = () => {
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="card" style={{ marginTop: "24px" }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: "18px", fontWeight: 600 }}>Quick Actions</h3>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              {canAccessIntake && (
-                <Link to="/intake" style={{ textDecoration: "none" }}>
-                  <button className="btn btn-primary">📥 New Intake</button>
-                </Link>
-              )}
-              {canScanQR && (
-                <Link to="/qr-scan" style={{ textDecoration: "none" }}>
-                  <button className="btn btn-ghost">📷 Scan QR</button>
-                </Link>
-              )}
-              {canManageDeliveries && (
-                <Link to="/queue?status=REPAIRED,UNREPAIRABLE" style={{ textDecoration: "none" }}>
-                  <button className="btn btn-ghost">📦 Deliveries</button>
-                </Link>
-              )}
-              {canViewCustomers && (
-                <Link to="/customers" style={{ textDecoration: "none" }}>
-                  <button className="btn btn-ghost">👤 Customers</button>
-                </Link>
               )}
             </div>
           </div>
