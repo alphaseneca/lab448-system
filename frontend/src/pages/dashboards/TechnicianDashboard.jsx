@@ -308,72 +308,100 @@ const TechnicianDashboard = () => {
   const canManageWorkQueue = isTechnicianUser;
   const canUpdateDiagnosis = isTechnicianUser;
   const canViewPerformanceMetrics = isTechnicianUser;
+ const handleTokenWithConfirmation = useCallback(async (token) => {
+  if (!token || !token.trim()) {
+    setTokenError("Please enter a QR token");
+    return;
+  }
 
-  const handleTokenWithConfirmation = useCallback(async (token) => {
-    if (!token || !token.trim()) {
-      setTokenError("Please enter a QR token");
-      return;
+  const trimmedToken = token.trim();
+  setProcessingToken(true);
+  setTokenError("");
+
+  try {
+    const response = await api.get(`/repairs/by-qr/${trimmedToken}`);
+
+    if (response.data && response.data.id) {
+      // Check if the repair is already assigned to someone else
+      if (response.data.status === "IN_REPAIR" && 
+          response.data.assignedToUserId && 
+          response.data.assignedToUserId !== user?.id) {
+        
+        // Get the technician name from the response
+        const techName = response.data.assignedTo?.name || "another technician";
+        
+        // Show error message instead of opening modal
+        setTokenError(`This repair item is already being repaired by ${techName}.`);
+        setProcessingToken(false);
+        return;
+      }
+      
+      // If not assigned or assigned to current user, proceed with modal
+      setPendingToken(trimmedToken);
+      setRepairInfo(response.data);
+      setShowStartModal(true);
+    } else {
+      setTokenError("No repair found with this token");
     }
+  } catch (err) {
+    console.error("Token lookup error:", err);
+    if (err.response?.status === 404) {
+      setTokenError("No repair found with this token");
+    } else if (err.response?.status === 403) {
 
-    const trimmedToken = token.trim();
+      const errorMsg = err.response.data?.message || "You don't have permission to access this repair";
+      setTokenError(errorMsg);
+    } else {
+      setTokenError("Failed to lookup token. Please try again.");
+    }
+  } finally {
+    setProcessingToken(false);
+  }
+}, [user?.id]);
+
+  
+  const handleStartRepair = useCallback(async () => {
+    if (!pendingToken || !repairInfo) return;
+
+    setShowStartModal(false);
     setProcessingToken(true);
     setTokenError("");
 
     try {
-      const response = await api.get(`/repairs/by-qr/${trimmedToken}`);
+      const repairId = repairInfo.id;
 
-      if (response.data && response.data.id) {
-        setPendingToken(trimmedToken);
-        setRepairInfo(response.data);
-        setShowStartModal(true);
-      } else {
-        setTokenError("No repair found with this token");
-      }
-    } catch (err) {
-      console.error("Token lookup error:", err);
-      if (err.response?.status === 404) {
-        setTokenError("No repair found with this token");
-      } else if (err.response?.status === 403) {
-        setTokenError("You don't have permission to access this repair");
-      } else {
-        setTokenError("Failed to lookup token. Please try again.");
-      }
-    } finally {
-      setProcessingToken(false);
-    }
-  }, []);
-
-  const handleStartRepair = useCallback(async () => {
-    if (!pendingToken) return;
-
-    setShowStartModal(false);
-    setProcessingToken(true);
-
-    try {
-      const response = await api.get(`/repairs/by-qr/${pendingToken}`);
-
-      if (response.data && response.data.id) {
-        const repairId = response.data.id;
-
-        if (response.data.status !== "IN_REPAIR") {
-          try {
-            await api.post(`/repairs/${repairId}/transition`, {
-              newStatus: "IN_REPAIR",
-            });
-          } catch (transitionErr) {
-            console.log(
-              "Could not transition status, may already be in repair",
-            );
+      // Only transition if not already IN_REPAIR
+      if (repairInfo.status !== "IN_REPAIR") {
+        try {
+          await api.post(`/repairs/${repairId}/transition`, {
+            newStatus: "IN_REPAIR",
+          });
+        } catch (transitionErr) {
+          
+          if (transitionErr.response?.status === 409) {
+            
+            setTokenError(transitionErr.response.data.message || "This repair is already being worked on by another technician.");
+            setPendingToken("");
+            setRepairInfo(null);
+            setManualToken("");
+            setTimeout(() => tokenInputRef.current?.focus(), 100);
+            return;
           }
+          throw transitionErr;
         }
-
-        navigate(`/repairs/${repairId}`);
-      } else {
-        setTokenError("Failed to load repair details");
       }
+
+       
+      navigate(`/repairs/${repairId}`);
     } catch (err) {
       console.error("Error starting repair:", err);
-      setTokenError("Failed to start repair. Please try again.");
+      if (err.response?.status === 409) {
+        setTokenError(err.response.data.message || "This repair is already being worked on by another technician.");
+      } else if (err.response?.status === 400 && err.response.data.message?.includes("Invalid status transition")) {
+        setTokenError("This repair cannot be started (invalid status).");
+      } else {
+        setTokenError("Failed to start repair. Please try again.");
+      }
     } finally {
       setProcessingToken(false);
       setPendingToken("");
@@ -381,7 +409,7 @@ const TechnicianDashboard = () => {
       setManualToken("");
       setTimeout(() => tokenInputRef.current?.focus(), 100);
     }
-  }, [pendingToken, navigate]);
+  }, [pendingToken, repairInfo, navigate]);
 
   const handleCancelStart = useCallback(() => {
     setShowStartModal(false);
@@ -390,7 +418,6 @@ const TechnicianDashboard = () => {
     setManualToken("");
     setTimeout(() => tokenInputRef.current?.focus(), 100);
   }, []);
-
   useEffect(() => {
     if (isTechnicianUser && tokenInputRef.current) {
       tokenInputRef.current.focus();
@@ -436,23 +463,23 @@ const TechnicianDashboard = () => {
     };
   }, [isTechnicianUser, handleTokenWithConfirmation]);
 
+  // --- FIX: Dashboard data fetching ---
   useEffect(() => {
     if (!isTechnicianUser) {
       setError(
-        "Access denied. You need TECHNICIAN role to access this dashboard.",
+        "Access denied. You need TECHNICIAN role to access this dashboard."
       );
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    api
-      .get("/dashboard/technician")
-      .then((r) => {
-        setData(r.data);
+    const fetchDashboard = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get("/dashboard/technician");
+        setData(response.data);
         setError("");
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("Dashboard error:", err);
         if (err.response?.status === 403) {
           setError("Permission denied. Contact your administrator.");
@@ -461,13 +488,15 @@ const TechnicianDashboard = () => {
           setTimeout(() => navigate("/login"), 2000);
         } else {
           setError(
-            err.response?.data?.message || "Failed to load dashboard data",
+            err.response?.data?.message || "Failed to load dashboard data"
           );
         }
-      })
-      .finally(() => {
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchDashboard();
   }, [isTechnicianUser, navigate]);
 
   const handleTokenInputChange = (e) => {
@@ -484,7 +513,6 @@ const TechnicianDashboard = () => {
   };
 
   const current = data?.current_month_stats ?? {};
-  const trend = data?.performance_trend ?? [];
   const assigned = Array.isArray(data?.my_active_repairs)
     ? data.my_active_repairs
     : [];

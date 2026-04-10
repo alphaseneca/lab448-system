@@ -60,6 +60,38 @@ const recalcRepairTotals = async (repairId, transaction = null) => {
 
 router.use(authenticate);
 
+// Middleware to check if a repair is already assigned to another technician
+const checkRepairAssignment = async (req, res, next) => {
+  const { id } = req.params;
+  
+  try {
+    const repair = await db.Repair.findByPk(id, {
+      include: [{ model: db.User, as: "assignedTo", attributes: ["id", "name"] }]
+    });
+    
+    if (!repair) {
+      return res.status(404).json({ message: "Repair not found" });
+    }
+    
+    // If repair is in IN_REPAIR status and assigned to someone else, block access
+    if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+        repair.assignedToUserId && 
+        repair.assignedToUserId !== req.user.id) {
+      const techName = repair.assignedTo ? repair.assignedTo.name : 'another technician';
+      return res.status(403).json({ 
+        message: `This repair is currently being worked on by ${techName}. You cannot access it.` 
+      });
+    }
+    
+    // Attach repair to request for later use
+    req.repair = repair;
+    next();
+  } catch (err) {
+    console.error("Assignment check error", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 // Search repairs that have inventory usage for the given SKU
 router.get(
   "/by-sku",
@@ -145,6 +177,7 @@ router.get(
         qrToken: r.qrToken,
         status: r.status,
         createdAt: r.createdAt,
+        assignedToUserId: r.assignedToUserId, // Include assigned user info
         skus: (r.inventoryUsage || [])
           .map((u) => ({
             sku: u.inventory?.sku || null,
@@ -353,103 +386,156 @@ router.post(
     }
 
     try {
-      const repair = await db.Repair.findByPk(id, {
-        include: [{ model: db.Customer, as: "customer" }],
-      });
-      if (!repair) {
-        return res.status(404).json({ message: "Repair not found" });
-      }
-
-      const allowed = ALLOWED_STATUS_TRANSITIONS[repair.status] || [];
-      if (!allowed.includes(newStatus)) {
-        return res.status(400).json({
-          message: `Invalid status transition from ${repair.status} to ${newStatus}`,
+      const result = await sequelize.transaction(async (t) => {
+        // First, get the repair with lock WITHOUT any joins
+        const repair = await db.Repair.findByPk(id, {
+          lock: t.LOCK.UPDATE,
+          transaction: t
         });
-      }
-
-      const updateData = { status: newStatus };
-      const now = new Date();
-
-      if (
-        repair.status === REPAIR_STATUS.INTAKE &&
-        newStatus === REPAIR_STATUS.TO_REPAIR
-      ) {
-        updateData.toRepairAt = now;
-      }
-      if (newStatus === REPAIR_STATUS.IN_REPAIR && !repair.inRepairAt) {
-        updateData.inRepairAt = now;
-      }
-
-      if (
-        newStatus === REPAIR_STATUS.REPAIRED ||
-        newStatus === REPAIR_STATUS.UNREPAIRABLE
-      ) {
-        updateData.completedAt = now;
-      }
-
-      if (newStatus === REPAIR_STATUS.DELIVERED) {
-        updateData.deliveredAt = now;
-      }
-
-      await repair.update(updateData);
-
-      await logAudit({
-        userId: req.user.id,
-        repairId: id,
-        entityType: "Repair",
-        entityId: id,
-        action: "STATUS_CHANGED",
-        metadata: { from: repair.status, to: newStatus },
-      });
-
-      // Send repaired SMS once when status becomes REPAIRED or UNREPAIRABLE
-      const shouldSendRepairedSms =
-        (newStatus === REPAIR_STATUS.REPAIRED ||
-          newStatus === REPAIR_STATUS.UNREPAIRABLE) &&
-        !repair.smsRepairedSentAt &&
-        repair.customer?.phone;
-      if (shouldSendRepairedSms) {
-        try {
-          const template =
-            newStatus === REPAIR_STATUS.UNREPAIRABLE
-              ? SMS_MESSAGES.UNREPAIRABLE
-              : SMS_MESSAGES.REPAIRED;
-          const text = formatSmsMessage(template, {
-            customerName: repair.customer.name,
-            qrToken: repair.qrToken,
-            date: new Date().toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
-          });
-          const smsResult = await sendSms(repair.customer.phone, text);
-          if (smsResult.success) {
-            await repair.update({ smsRepairedSentAt: now });
-          } else {
-            console.warn("Repaired SMS not sent:", smsResult.error);
-          }
-        } catch (smsErr) {
-          console.error("Repaired SMS error:", smsErr);
+        
+        if (!repair) {
+          throw new Error("REPAIR_NOT_FOUND");
         }
-      }
 
-      const updated = await db.Repair.findByPk(id, {
-        include: [{ model: db.Customer, as: "customer" }],
+        //fetch the associated data separately  
+        const customer = await db.Customer.findByPk(repair.customerId, {
+          transaction: t
+        });
+        
+        let assignedTo = null;
+        if (repair.assignedToUserId) {
+          assignedTo = await db.User.findByPk(repair.assignedToUserId, {
+            attributes: ["id", "name"],
+            transaction: t
+          });
+        }
+
+        // Attach the associated data to the repair object
+        repair.customer = customer;
+        repair.assignedTo = assignedTo;
+
+        const allowed = ALLOWED_STATUS_TRANSITIONS[repair.status] || [];
+        
+         
+        
+        if (!allowed.includes(newStatus)) {
+          throw new Error(`INVALID_TRANSITION: Cannot transition from ${repair.status} to ${newStatus}. Allowed transitions: ${allowed.join(', ')}`);
+        }
+
+        // IMPORTANT: Declare these BEFORE any conditional blocks
+        const updateData = { status: newStatus };
+        const now = new Date();
+
+        // Handle IN_REPAIR specific logic
+        if (newStatus === REPAIR_STATUS.IN_REPAIR) {
+          // If already assigned to someone else → block
+          if (repair.assignedToUserId && repair.assignedToUserId !== req.user.id) {
+            const techName = assignedTo ? assignedTo.name : 'another technician';
+            throw new Error(`ALREADY_ASSIGNED:${techName}`);
+          }
+          
+          // If not assigned yet, assign to current user
+          if (!repair.assignedToUserId) {
+            updateData.assignedToUserId = req.user.id;
+          }
+          // Set inRepairAt if not already set
+          if (!repair.inRepairAt) {
+            updateData.inRepairAt = now;
+          }
+        }
+
+        // Handle other statuses
+        if (newStatus === REPAIR_STATUS.REPAIRED ||
+            newStatus === REPAIR_STATUS.UNREPAIRABLE) {
+          updateData.completedAt = now;
+        }
+
+        if (newStatus === REPAIR_STATUS.DELIVERED) {
+          updateData.deliveredAt = now;
+        }
+
+        // Update the repair
+        await repair.update(updateData, { transaction: t });
+
+        await logAudit(
+          {
+            userId: req.user.id,
+            repairId: id,
+            entityType: "Repair",
+            entityId: id,
+            action: "STATUS_CHANGED",
+            metadata: { from: repair.status, to: newStatus, assignedToUserId: updateData.assignedToUserId },
+          },
+          t,
+        );
+
+        // Send repaired SMS once when status becomes REPAIRED or UNREPAIRABLE
+        const shouldSendRepairedSms =
+          (newStatus === REPAIR_STATUS.REPAIRED ||
+            newStatus === REPAIR_STATUS.UNREPAIRABLE) &&
+          !repair.smsRepairedSentAt &&
+          customer?.phone;
+          
+        if (shouldSendRepairedSms) {
+          try {
+            const template =
+              newStatus === REPAIR_STATUS.UNREPAIRABLE
+                ? SMS_MESSAGES.UNREPAIRABLE
+                : SMS_MESSAGES.REPAIRED;
+            const text = formatSmsMessage(template, {
+              customerName: customer.name,
+              qrToken: repair.qrToken,
+              date: new Date().toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
+            });
+            const smsResult = await sendSms(customer.phone, text);
+            if (smsResult.success) {
+              await repair.update({ smsRepairedSentAt: now }, { transaction: t });
+            } else {
+              console.warn("Repaired SMS not sent:", smsResult.error);
+            }
+          } catch (smsErr) {
+            console.error("Repaired SMS error:", smsErr);
+          }
+        }
+
+        // Return the updated repair with customer data
+        const updated = await db.Repair.findByPk(id, {
+          include: [{ model: db.Customer, as: "customer" }],
+          transaction: t
+        });
+        
+        return updated || repair;
       });
-      res.json(updated || repair);
+
+      res.json(result);
     } catch (err) {
       console.error("Transition error", err);
+      if (err.message === "REPAIR_NOT_FOUND") {
+        return res.status(404).json({ message: "Repair not found" });
+      }
+      if (err.message.startsWith("INVALID_TRANSITION")) {
+        return res.status(400).json({ message: err.message });
+      }
+      if (err.message.startsWith("ALREADY_ASSIGNED:")) {
+        const techName = err.message.split(":")[1];
+        return res.status(409).json({
+          message: `This repair item is already being repaired by ${techName}.`
+        });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
-  },
+  }
 );
-
 // Use inventory on a repair: atomically decrement stock, create usage and charge
 // Body: inventoryId (optional) OR itemKey (id or sku), and quantity
 router.post(
   "/:id/use-inventory",
   authorize([PERMISSIONS.USE_INVENTORY]),
+  checkRepairAssignment, // Add assignment check middleware
   async (req, res) => {
     const { id } = req.params;
     const { inventoryId, itemKey, quantity } = req.body;
@@ -465,10 +551,23 @@ router.post(
 
     try {
       const result = await sequelize.transaction(async (t) => {
-        const repair = await db.Repair.findByPk(id, { transaction: t });
+        const repair = await db.Repair.findByPk(id, { 
+          lock: t.LOCK.UPDATE,
+          transaction: t 
+        });
+        
         if (!repair) {
           throw new Error("REPAIR_NOT_FOUND");
         }
+        
+        // Double-check assignment within transaction
+        if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+            repair.assignedToUserId && 
+            repair.assignedToUserId !== req.user.id) {
+          const assignedUser = await db.User.findByPk(repair.assignedToUserId, { transaction: t });
+          throw new Error(`ALREADY_ASSIGNED:${assignedUser?.name || 'another technician'}`);
+        }
+        
         if (repair.isLocked) {
           throw new Error("BILL_LOCKED");
         }
@@ -549,21 +648,23 @@ router.post(
       res.status(201).json(result);
     } catch (err) {
       console.error("Use inventory error", err);
-      if (
-        err.message === "REPAIR_NOT_FOUND" ||
-        err.message === "INVENTORY_NOT_FOUND"
-      ) {
+      if (err.message === "REPAIR_NOT_FOUND" ||
+          err.message === "INVENTORY_NOT_FOUND") {
         return res
           .status(404)
           .json({ message: "Repair or inventory not found" });
       }
+      if (err.message.startsWith("ALREADY_ASSIGNED:")) {
+        const techName = err.message.split(":")[1];
+        return res.status(403).json({
+          message: `This repair is currently being worked on by ${techName}. You cannot modify it.`
+        });
+      }
       if (err.message === "BILL_LOCKED") {
         return res.status(400).json({ message: "Repair bill is locked" });
       }
-      if (
-        err.message === "INSUFFICIENT_STOCK" ||
-        err.message === "STOCK_WENT_NEGATIVE"
-      ) {
+      if (err.message === "INSUFFICIENT_STOCK" ||
+          err.message === "STOCK_WENT_NEGATIVE") {
         return res.status(400).json({ message: "Insufficient inventory" });
       }
       res.status(500).json({ message: "Internal server error" });
@@ -575,6 +676,7 @@ router.post(
 router.post(
   "/:id/add-charge",
   authorize([PERMISSIONS.MANAGE_BILLING]),
+  checkRepairAssignment, // Add assignment check middleware
   async (req, res) => {
     const { id } = req.params;
     const { type = "OTHER", description, amount } = req.body;
@@ -586,10 +688,22 @@ router.post(
     }
 
     try {
-      const repair = await db.Repair.findByPk(id);
+      const repair = req.repair || await db.Repair.findByPk(id);
+      
       if (!repair) {
         return res.status(404).json({ message: "Repair not found" });
       }
+      
+      // Double-check assignment
+      if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+          repair.assignedToUserId && 
+          repair.assignedToUserId !== req.user.id) {
+        const assignedUser = await db.User.findByPk(repair.assignedToUserId);
+        return res.status(403).json({
+          message: `This repair is currently being worked on by ${assignedUser?.name || 'another technician'}. You cannot modify it.`
+        });
+      }
+      
       if (repair.isLocked) {
         return res.status(400).json({ message: "Repair bill is locked" });
       }
@@ -631,6 +745,7 @@ router.post(
 router.post(
   "/:id/pay",
   authorize([PERMISSIONS.TAKE_PAYMENT]),
+  checkRepairAssignment, // Add assignment check middleware
   async (req, res) => {
     const { id } = req.params;
     const { amount, method } = req.body;
@@ -645,11 +760,22 @@ router.post(
       const result = await sequelize.transaction(async (t) => {
         const repair = await db.Repair.findByPk(id, {
           include: [{ model: db.Payment, as: "payments" }],
+          lock: t.LOCK.UPDATE,
           transaction: t,
         });
+        
         if (!repair) {
           throw new Error("REPAIR_NOT_FOUND");
         }
+        
+        // Double-check assignment within transaction
+        if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+            repair.assignedToUserId && 
+            repair.assignedToUserId !== req.user.id) {
+          const assignedUser = await db.User.findByPk(repair.assignedToUserId, { transaction: t });
+          throw new Error(`ALREADY_ASSIGNED:${assignedUser?.name || 'another technician'}`);
+        }
+        
         const billableStatuses = [REPAIR_STATUS.REPAIRED, REPAIR_STATUS.UNREPAIRABLE];
         if (!billableStatuses.includes(repair.status)) {
           throw new Error("BILLING_NOT_READY");
@@ -728,6 +854,12 @@ router.post(
       if (err.message === "REPAIR_NOT_FOUND") {
         return res.status(404).json({ message: "Repair not found" });
       }
+      if (err.message.startsWith("ALREADY_ASSIGNED:")) {
+        const techName = err.message.split(":")[1];
+        return res.status(403).json({
+          message: `This repair is currently being worked on by ${techName}. You cannot process payment.`
+        });
+      }
       if (err.message === "BILLING_NOT_READY") {
         return res.status(400).json({
           message: "Billing is only available when the item is marked Repaired or Unrepairable",
@@ -783,6 +915,7 @@ router.get(
             ],
           },
           { model: db.Device, as: "device" },
+          { model: db.User, as: "assignedTo", attributes: ["id", "name"] } // Include assigned technician
         ],
         order: [["createdAt", "ASC"]],
       });
@@ -821,12 +954,18 @@ router.get(
             ],
           },
           { model: db.Device, as: "device" },
+          { model: db.User, as: "assignedTo", attributes: ["id", "name"] } // Include assigned technician
         ],
       });
       if (!repair) {
         return res.status(404).json({ message: "Repair not found" });
       }
-      res.json(repair);
+      
+      // Add assignment info to response
+      const response = repair.toJSON();
+      response.isAssignedToCurrentUser = repair.assignedToUserId === req.user.id;
+      
+      res.json(response);
     } catch (err) {
       console.error("by-qr error", err);
       res.status(500).json({ message: "Internal server error" });
@@ -838,17 +977,29 @@ router.get(
 router.get(
   "/:id/billing",
   authorize([PERMISSIONS.MANAGE_BILLING, PERMISSIONS.TAKE_PAYMENT]),
+  checkRepairAssignment, // Add assignment check middleware
   async (req, res) => {
     const { id } = req.params;
     try {
-      const repair = await db.Repair.findByPk(id, {
+      const repair = req.repair || await db.Repair.findByPk(id, {
         include: [
           { model: db.RepairCharge, as: "charges" },
           { model: db.Payment, as: "payments" },
         ],
       });
+      
       if (!repair) {
         return res.status(404).json({ message: "Repair not found" });
+      }
+      
+      // Double-check assignment
+      if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+          repair.assignedToUserId && 
+          repair.assignedToUserId !== req.user.id) {
+        const assignedUser = await db.User.findByPk(repair.assignedToUserId);
+        return res.status(403).json({
+          message: `This repair is currently being worked on by ${assignedUser?.name || 'another technician'}. You cannot view its billing.`
+        });
       }
 
       const total = Number(repair.totalCharges);
@@ -864,6 +1015,7 @@ router.get(
         paid,
         due,
         isLocked: repair.isLocked,
+        assignedToUserId: repair.assignedToUserId,
         charges: repair.charges,
         payments: repair.payments,
       });
@@ -875,16 +1027,17 @@ router.get(
 );
 
 // Get single repair with full details
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", authenticate, checkRepairAssignment, async (req, res) => {
   const { id } = req.params;
   try {
-    const repair = await db.Repair.findByPk(id, {
+    const repair = req.repair || await db.Repair.findByPk(id, {
       include: [
         { model: db.Customer, as: "customer" },
         { model: db.Device, as: "device" },
         { model: db.RepairCategory, as: "repairCategory" },
         { model: db.RepairCharge, as: "charges" },
         { model: db.Payment, as: "payments" },
+        { model: db.User, as: "assignedTo", attributes: ["id", "name"] },
         {
           model: db.InventoryUsage,
           as: "inventoryUsage",
@@ -892,9 +1045,21 @@ router.get("/:id", authenticate, async (req, res) => {
         },
       ],
     });
+    
     if (!repair) {
       return res.status(404).json({ message: "Repair not found" });
     }
+    
+    // Double-check assignment
+    if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+        repair.assignedToUserId && 
+        repair.assignedToUserId !== req.user.id) {
+      const assignedUser = await db.User.findByPk(repair.assignedToUserId);
+      return res.status(403).json({
+        message: `This repair is currently being worked on by ${assignedUser?.name || 'another technician'}.`
+      });
+    }
+    
     res.json(repair);
   } catch (err) {
     console.error("Get repair error", err);
