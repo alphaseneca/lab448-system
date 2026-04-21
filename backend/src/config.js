@@ -74,13 +74,13 @@ export const TECHNICIAN_LEVELS = {
 export const SMS_MESSAGES = {
   INTAKE:
     process.env.SMS_INTAKE_MESSAGE ||
-    "Hi {{customerName}}, your device has been received for repair on {{date}}. ID: {{qrToken}}. We'll update you when it's ready. - Lab448",
+    "Hi {{customerName}}, your device has been received for repair on {{date}}. ID: {{qrToken}}. We'll update you when it's ready. - Lab448 \n071-592248",
   REPAIRED:
     process.env.SMS_REPAIRED_MESSAGE ||
-    "Your device repair is complete. ID: {{qrToken}}. Please collect it from our store. - Lab448",
+    "Your device repair is complete. ID: {{qrToken}}. Please collect it from our store. - Lab448 \n071-592248",
   UNREPAIRABLE:
     process.env.SMS_UNREPAIRABLE_MESSAGE ||
-    "We're sorry we couldn't repair your device with ID {{qrToken}}. Please collect it from our store. - Lab448",
+    "We're sorry we couldn't repair your device with ID {{qrToken}}. Please collect it from our store. - Lab448 \n071-592248",
 };
 
 export function formatSmsMessage(template, data = {}) {
