@@ -39,29 +39,29 @@ const ConfirmationModal = ({
 
   const getModalColors = () => {
     switch (actionType) {
-      case 'REPAIRED':
+      case "REPAIRED":
         return {
           bg: "linear-gradient(145deg, #064e3b, #065f46)",
           border: "rgba(16, 185, 129, 0.3)",
           shadow: "rgba(16, 185, 129, 0.2)",
           gradient: "linear-gradient(135deg, #10b981, #059669)",
-          icon: "✅"
+          icon: "✅",
         };
-      case 'UNREPAIRABLE':
+      case "UNREPAIRABLE":
         return {
           bg: "linear-gradient(145deg, #7f1d1d, #991b1b)",
           border: "rgba(220, 38, 38, 0.3)",
           shadow: "rgba(220, 38, 38, 0.2)",
           gradient: "linear-gradient(135deg, #ef4444, #dc2626)",
-          icon: "❌"
+          icon: "❌",
         };
-      case 'DELIVERED':
+      case "DELIVERED":
         return {
           bg: "linear-gradient(145deg, #1e3a8a, #1e40af)",
           border: "rgba(59, 130, 246, 0.3)",
           shadow: "rgba(59, 130, 246, 0.2)",
           gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
-          icon: "🚚"
+          icon: "🚚",
         };
       default:
         return {
@@ -69,7 +69,7 @@ const ConfirmationModal = ({
           border: "rgba(239, 68, 68, 0.3)",
           shadow: "rgba(239, 68, 68, 0.2)",
           gradient: "linear-gradient(135deg, #f87171, #ef4444)",
-          icon: "⚠️"
+          icon: "⚠️",
         };
     }
   };
@@ -196,7 +196,7 @@ const ConfirmationModal = ({
               transition: "all 0.2s",
               boxShadow:
                 document.activeElement === yesButtonRef.current
-                  ? `0 0 0 3px ${colors.border.replace('0.3', '0.5')}`
+                  ? `0 0 0 3px ${colors.border.replace("0.3", "0.5")}`
                   : "none",
               minWidth: "100px",
             }}
@@ -263,7 +263,7 @@ const RepairWorkspacePage = () => {
   const [lookupError, setLookupError] = useState("");
   const [statusError, setStatusError] = useState("");
   const [invError, setInvError] = useState("");
-
+  const itemKeyInputRef = useRef(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [confirmationMessage, setConfirmationMessage] = useState("");
@@ -274,7 +274,18 @@ const RepairWorkspacePage = () => {
 
   const qrPrintRef = useRef(null);
   const [labelConfig, setLabelConfig] = useState(null);
+  // Focus when component mounts
+  useEffect(() => {
+    if (itemKeyInputRef.current) {
+      itemKeyInputRef.current.focus();
+    }
+  }, []);
 
+  useEffect(() => {
+    if (repair && itemKeyInputRef.current) {
+      itemKeyInputRef.current.focus();
+    }
+  }, [repair]);
   useEffect(() => {
     getQrLabelConfig().then(setLabelConfig);
   }, []);
@@ -388,7 +399,31 @@ const RepairWorkspacePage = () => {
       setInvError(err.response?.data?.message || "Failed to use inventory");
     }
   };
-
+  const handleInventoryKeyDown = (e) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      // Compute current nextActions
+      const actions = [];
+      if (repair?.status === REPAIR_STATUS.IN_REPAIR) {
+        actions.push(
+          { label: "Mark as repaired", status: REPAIR_STATUS.REPAIRED },
+          { label: "Mark as unrepairable", status: REPAIR_STATUS.UNREPAIRABLE },
+        );
+      } else if (
+        repair?.status === REPAIR_STATUS.REPAIRED ||
+        repair?.status === REPAIR_STATUS.UNREPAIRABLE
+      ) {
+        actions.push({
+          label: "Mark as delivered",
+          status: REPAIR_STATUS.DELIVERED,
+        });
+      }
+      if (actions.length > 0 && statusDivRef.current) {
+        statusDivRef.current.focus();
+        setFocusedButtonIndex(0);
+      }
+    }
+  };
   useEffect(() => {
     if (!repair) return;
 
@@ -435,6 +470,12 @@ const RepairWorkspacePage = () => {
 
         if (nextActions.length > 0) {
           if (e.key === "ArrowDown") {
+            // If on last button, move focus to inventory input
+            if (focusedButtonIndex === nextActions.length - 1) {
+              e.preventDefault();
+              itemKeyInputRef.current?.focus();
+              return;
+            }
             setFocusedButtonIndex((prev) => (prev + 1) % nextActions.length);
           } else if (e.key === "ArrowUp") {
             setFocusedButtonIndex(
@@ -493,25 +534,25 @@ const RepairWorkspacePage = () => {
         return {
           bg: "rgba(16, 185, 129, 0.2)",
           text: "#10b981",
-          border: "rgba(16, 185, 129, 0.3)"
+          border: "rgba(16, 185, 129, 0.3)",
         };
       case REPAIR_STATUS.UNREPAIRABLE:
         return {
           bg: "rgba(239, 68, 68, 0.2)",
           text: "#ef4444",
-          border: "rgba(239, 68, 68, 0.3)"
+          border: "rgba(239, 68, 68, 0.3)",
         };
       case REPAIR_STATUS.DELIVERED:
         return {
           bg: "rgba(59, 130, 246, 0.2)",
           text: "#3b82f6",
-          border: "rgba(59, 130, 246, 0.3)"
+          border: "rgba(59, 130, 246, 0.3)",
         };
       default:
         return {
           bg: "rgba(255,255,255,0.06)",
           text: "var(--text)",
-          border: "rgba(255,255,255,0.1)"
+          border: "rgba(255,255,255,0.1)",
         };
     }
   };
@@ -555,10 +596,14 @@ const RepairWorkspacePage = () => {
           <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
             🔧 Repair dashboard
           </h2>
-          <p className="muted small" style={{ marginTop: "4px" }}>
-            {repair.customer?.name} · {repair.device?.brand}{" "}
-            {repair.device?.model}
-          </p>
+          <div style={{
+            marginTop: "6px",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "12px",
+            alignItems: "center"
+          }}>
+          </div>
         </div>
       </div>
 
@@ -569,29 +614,60 @@ const RepairWorkspacePage = () => {
           gap: "18px",
         }}
       >
-        <div className="card" style={{ padding: "18px" }}>
+        <div className="card" style={{ padding: "20px", border: "1px solid rgba(124, 92, 255, 0.15)" }}>
           <h3
             style={{
-              margin: "0 0 12px",
-              fontSize: "14px",
-              fontWeight: 600,
+              margin: "0 0 16px",
+              fontSize: "12px",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
               color: "var(--muted)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
             }}
           >
-            👤 Customer
+            👤 Customer Information
           </h3>
-          <div style={{ fontSize: "15px", fontWeight: 500 }}>
-            {repair.customer?.name}
-          </div>
-          <div className="small muted" style={{ marginTop: "4px" }}>
-            {repair.customer?.phone}
-            {repair.customer?.email ? ` · ${repair.customer.email}` : ""}
-          </div>
-          <div className="small muted" style={{ marginTop: "10px" }}>
-            QR:{" "}
-            <span style={{ fontFamily: "monospace", color: "var(--text)" }}>
-              {repair.qrToken}
-            </span>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text)", marginBottom: "4px" }}>
+                {repair.customer?.name || "Unknown Customer"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "14px", opacity: 0.7 }}>📞</span>
+                  <span style={{ fontSize: "14px", color: "var(--text)", opacity: 0.9 }}>
+                    {repair.customer?.phone || "No contact number"}
+                  </span>
+                </div>
+                {repair.customer?.email && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "14px", opacity: 0.7 }}>📧</span>
+                    <span style={{ fontSize: "14px", color: "var(--text)", opacity: 0.9 }}>
+                      {repair.customer.email}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{
+              marginTop: "4px",
+              padding: "12px",
+              background: "rgba(124, 92, 255, 0.05)",
+              borderRadius: "8px",
+              border: "1px solid rgba(124, 92, 255, 0.1)"
+            }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", marginBottom: "4px" }}>
+                QR Token
+              </div>
+              <div style={{ fontFamily: "monospace", fontSize: "14px", color: "var(--accent)", fontWeight: 700 }}>
+                {repair.qrToken}
+              </div>
+            </div>
           </div>
           <div
             style={{
@@ -689,14 +765,16 @@ const RepairWorkspacePage = () => {
             }}
           >
             Status
-            <span style={{
-              marginLeft: "8px",
-              fontSize: "11px",
-              color: "#3b82f6",
-              background: "rgba(59,130,246,0.1)",
-              padding: "2px 6px",
-              borderRadius: "4px"
-            }}>
+            <span
+              style={{
+                marginLeft: "8px",
+                fontSize: "11px",
+                color: "#3b82f6",
+                background: "rgba(59,130,246,0.1)",
+                padding: "2px 6px",
+                borderRadius: "4px",
+              }}
+            >
               Use ↓↑ arrows
             </span>
           </h3>
@@ -758,10 +836,11 @@ const RepairWorkspacePage = () => {
                   color: "#fff",
                   borderRadius: "8px",
                   cursor: "pointer",
-                  boxShadow: focusedButtonIndex === index &&
-                    statusDivRef.current === document.activeElement
-                    ? "0 0 0 3px rgba(255,255,255,0.3)"
-                    : "none",
+                  boxShadow:
+                    focusedButtonIndex === index &&
+                      statusDivRef.current === document.activeElement
+                      ? "0 0 0 3px rgba(255,255,255,0.3)"
+                      : "none",
                 }}
               >
                 {a.label}
@@ -801,9 +880,11 @@ const RepairWorkspacePage = () => {
                 Item key or ID
               </label>
               <input
+                ref={itemKeyInputRef}
                 type="text"
                 value={itemKey}
                 onChange={(e) => setItemKey(e.target.value)}
+                onKeyDown={handleInventoryKeyDown}
                 placeholder="Enter item ID or SKU"
                 style={{
                   width: "100%",

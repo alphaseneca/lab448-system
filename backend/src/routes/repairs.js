@@ -981,7 +981,7 @@ router.get(
   async (req, res) => {
     const { id } = req.params;
     try {
-      const repair = req.repair || await db.Repair.findByPk(id, {
+      const repair = await db.Repair.findByPk(id, {
         include: [
           { model: db.RepairCharge, as: "charges" },
           { model: db.Payment, as: "payments" },
@@ -1030,7 +1030,7 @@ router.get(
 router.get("/:id", authenticate, checkRepairAssignment, async (req, res) => {
   const { id } = req.params;
   try {
-    const repair = req.repair || await db.Repair.findByPk(id, {
+    const repair = await db.Repair.findByPk(id, {
       include: [
         { model: db.Customer, as: "customer" },
         { model: db.Device, as: "device" },
