@@ -38,7 +38,7 @@ const ConfirmationModal = ({
   const noButtonRef = useRef(null);
 
   const getModalColors = () => {
-    switch(actionType) {
+    switch (actionType) {
       case 'REPAIRED':
         return {
           bg: "linear-gradient(145deg, #064e3b, #065f46)",
@@ -488,7 +488,7 @@ const RepairWorkspacePage = () => {
   const deviceIssue = repair.device?.description?.trim() || "—";
 
   const getStatusColors = (status) => {
-    switch(status) {
+    switch (status) {
       case REPAIR_STATUS.REPAIRED:
         return {
           bg: "rgba(16, 185, 129, 0.2)",
@@ -517,7 +517,7 @@ const RepairWorkspacePage = () => {
   };
 
   const getButtonGradient = (status) => {
-    switch(status) {
+    switch (status) {
       case REPAIR_STATUS.REPAIRED:
         return "linear-gradient(135deg, #10b981, #059669)";
       case REPAIR_STATUS.UNREPAIRABLE:
@@ -689,13 +689,13 @@ const RepairWorkspacePage = () => {
             }}
           >
             Status
-            <span style={{ 
-              marginLeft: "8px", 
-              fontSize: "11px", 
-              color: "#3b82f6", 
-              background: "rgba(59,130,246,0.1)", 
-              padding: "2px 6px", 
-              borderRadius: "4px" 
+            <span style={{
+              marginLeft: "8px",
+              fontSize: "11px",
+              color: "#3b82f6",
+              background: "rgba(59,130,246,0.1)",
+              padding: "2px 6px",
+              borderRadius: "4px"
             }}>
               Use ↓↑ arrows
             </span>
@@ -745,12 +745,12 @@ const RepairWorkspacePage = () => {
                   outline: "none",
                   border:
                     focusedButtonIndex === index &&
-                    statusDivRef.current === document.activeElement
+                      statusDivRef.current === document.activeElement
                       ? "2px solid #fff"
                       : "none",
                   transform:
                     focusedButtonIndex === index &&
-                    statusDivRef.current === document.activeElement
+                      statusDivRef.current === document.activeElement
                       ? "scale(1.02)"
                       : "scale(1)",
                   transition: "all 0.2s",
@@ -760,8 +760,8 @@ const RepairWorkspacePage = () => {
                   cursor: "pointer",
                   boxShadow: focusedButtonIndex === index &&
                     statusDivRef.current === document.activeElement
-                      ? "0 0 0 3px rgba(255,255,255,0.3)"
-                      : "none",
+                    ? "0 0 0 3px rgba(255,255,255,0.3)"
+                    : "none",
                 }}
               >
                 {a.label}

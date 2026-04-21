@@ -65,7 +65,10 @@ const QueuePage = () => {
       const res = await api.get("/repairs/queue", {
         params: { status: ALL_STATUSES.join(",") },
       });
-      setRepairs(res.data);
+      const sorted = [...res.data].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      setRepairs(sorted);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load queue");
     } finally {
