@@ -400,7 +400,10 @@ const RepairWorkspacePage = () => {
     }
   };
   const handleInventoryKeyDown = (e) => {
-    if (e.key === "ArrowUp") {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addInventoryUsage();
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       // Compute current nextActions
       const actions = [];
