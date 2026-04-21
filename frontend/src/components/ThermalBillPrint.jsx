@@ -53,8 +53,8 @@ export function buildThermalBillHtml(billData) {
     groups = [],
     total = 0,
     logoSrc = LAB448_LOGO_SRC,
-    footerWebsite = "lab448.ukesharyl.com.np",
-    footerPhone = "98xxxxxxxx",
+    footerWebsite = "store.lab448.com",
+    footerPhone = "071-592248",
   } = billData;
 
   const w = THERMAL_BILL_WIDTH_MM;

@@ -155,21 +155,21 @@ const BillingPage = () => {
     combinedData?.items ??
     (repair
       ? [
-          {
-            repairId: repair.id,
-            qrToken: repair.qrToken,
-            device: repair.device,
-            status: repair.status,
-            isLocked: repair.isLocked,
-            total: Number(repair.totalCharges),
-            paid: (repair.payments || []).reduce((s, p) => s + Number(p.amount), 0),
-            due:
-              Number(repair.totalCharges) -
-              (repair.payments || []).reduce((s, p) => s + Number(p.amount), 0),
-            charges: repair.charges || [],
-            payments: repair.payments || [],
-          },
-        ]
+        {
+          repairId: repair.id,
+          qrToken: repair.qrToken,
+          device: repair.device,
+          status: repair.status,
+          isLocked: repair.isLocked,
+          total: Number(repair.totalCharges),
+          paid: (repair.payments || []).reduce((s, p) => s + Number(p.amount), 0),
+          due:
+            Number(repair.totalCharges) -
+            (repair.payments || []).reduce((s, p) => s + Number(p.amount), 0),
+          charges: repair.charges || [],
+          payments: repair.payments || [],
+        },
+      ]
       : null);
   const singleItem = items?.length === 1;
   const multiItem = items && items.length > 1;
@@ -239,8 +239,8 @@ const BillingPage = () => {
                   },
                   groups,
                   total: pendingTotal,
-                  footerWebsite: import.meta.env.VITE_BILL_FOOTER_WEBSITE ?? "lab448.ukesharyal.com.np",
-                  footerPhone: import.meta.env.VITE_BILL_FOOTER_PHONE ?? "98xxxxxxxx",
+                  footerWebsite: import.meta.env.VITE_BILL_FOOTER_WEBSITE ?? "store.lab448.com",
+                  footerPhone: import.meta.env.VITE_BILL_FOOTER_PHONE ?? "071-592248",
                 });
               }}
               className="btn"
@@ -284,9 +284,9 @@ const BillingPage = () => {
           marginBottom: "20px",
           ...(multiItem
             ? {
-                background: "linear-gradient(135deg, rgba(124, 92, 255, 0.08), rgba(96, 165, 250, 0.08))",
-                border: "1px solid rgba(124, 92, 255, 0.2)",
-              }
+              background: "linear-gradient(135deg, rgba(124, 92, 255, 0.08), rgba(96, 165, 250, 0.08))",
+              border: "1px solid rgba(124, 92, 255, 0.2)",
+            }
             : {}),
         }}
       >
