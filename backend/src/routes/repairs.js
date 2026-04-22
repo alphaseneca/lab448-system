@@ -73,10 +73,14 @@ const checkRepairAssignment = async (req, res, next) => {
       return res.status(404).json({ message: "Repair not found" });
     }
     
+    // Admin bypass: Admins and users with *:* permission can access anything
+    const isAdmin = req.user.roleCode === "ADMIN" || (req.user.permissions && req.user.permissions.includes("*:*"));
+    
     // If repair is in IN_REPAIR status and assigned to someone else, block access
     if (repair.status === REPAIR_STATUS.IN_REPAIR && 
         repair.assignedToUserId && 
-        repair.assignedToUserId !== req.user.id) {
+        String(repair.assignedToUserId) !== String(req.user.id) &&
+        !isAdmin) {
       const techName = repair.assignedTo ? repair.assignedTo.name : 'another technician';
       return res.status(403).json({ 
         message: `This repair is currently being worked on by ${techName}. You cannot access it.` 
@@ -414,9 +418,19 @@ router.post(
         repair.customer = customer;
         repair.assignedTo = assignedTo;
 
+        const isAdmin = req.user.roleCode === "ADMIN" || (req.user.permissions && req.user.permissions.includes("*:*"));
+        const isAssignedToMe = repair.assignedToUserId && String(repair.assignedToUserId) === String(req.user.id);
+
+        // If it's already in the target status and assigned to me (or I'm Admin), just return success
+        if (repair.status === newStatus && (isAssignedToMe || isAdmin)) {
+          const updated = await db.Repair.findByPk(id, {
+            include: [{ model: db.Customer, as: "customer" }],
+            transaction: t
+          });
+          return { updated: updated || repair, shouldSendRepairedSms: false };
+        }
+
         const allowed = ALLOWED_STATUS_TRANSITIONS[repair.status] || [];
-        
-         
         
         if (!allowed.includes(newStatus)) {
           throw new Error(`INVALID_TRANSITION: Cannot transition from ${repair.status} to ${newStatus}. Allowed transitions: ${allowed.join(', ')}`);
@@ -428,8 +442,11 @@ router.post(
 
         // Handle IN_REPAIR specific logic
         if (newStatus === REPAIR_STATUS.IN_REPAIR) {
-          // If already assigned to someone else → block
-          if (repair.assignedToUserId && repair.assignedToUserId !== req.user.id) {
+          // If already assigned to someone else → block (unless Admin)
+          const isAdmin = req.user.roleCode === "ADMIN" || (req.user.permissions && req.user.permissions.includes("*:*"));
+          if (repair.assignedToUserId && 
+              String(repair.assignedToUserId) !== String(req.user.id) && 
+              !isAdmin) {
             const techName = assignedTo ? assignedTo.name : 'another technician';
             throw new Error(`ALREADY_ASSIGNED:${techName}`);
           }
@@ -476,31 +493,7 @@ router.post(
           !repair.smsRepairedSentAt &&
           customer?.phone;
           
-        if (shouldSendRepairedSms) {
-          try {
-            const template =
-              newStatus === REPAIR_STATUS.UNREPAIRABLE
-                ? SMS_MESSAGES.UNREPAIRABLE
-                : SMS_MESSAGES.REPAIRED;
-            const text = formatSmsMessage(template, {
-              customerName: customer.name,
-              qrToken: repair.qrToken,
-              date: new Date().toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              }),
-            });
-            const smsResult = await sendSms(customer.phone, text);
-            if (smsResult.success) {
-              await repair.update({ smsRepairedSentAt: now }, { transaction: t });
-            } else {
-              console.warn("Repaired SMS not sent:", smsResult.error);
-            }
-          } catch (smsErr) {
-            console.error("Repaired SMS error:", smsErr);
-          }
-        }
+
 
         // Return the updated repair with customer data
         const updated = await db.Repair.findByPk(id, {
@@ -508,10 +501,47 @@ router.post(
           transaction: t
         });
         
-        return updated || repair;
+        return { 
+          updated: updated || repair, 
+          shouldSendRepairedSms, 
+          customer, 
+          newStatus 
+        };
       });
 
-      res.json(result);
+      // Send repaired SMS OUTSIDE the transaction to avoid database locks
+      if (result.shouldSendRepairedSms) {
+        try {
+          const template =
+            result.newStatus === REPAIR_STATUS.UNREPAIRABLE
+              ? SMS_MESSAGES.UNREPAIRABLE
+              : SMS_MESSAGES.REPAIRED;
+          const text = formatSmsMessage(template, {
+            customerName: result.customer.name,
+            qrToken: result.updated.qrToken,
+            date: new Date().toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
+          });
+          const smsResult = await sendSms(result.customer.phone, text);
+          if (smsResult.success) {
+            // Update the repair to record that SMS was sent
+            // This is a simple update outside the main transition transaction
+            await db.Repair.update(
+              { smsRepairedSentAt: new Date() },
+              { where: { id: result.updated.id } }
+            );
+          } else {
+            console.warn("Repaired SMS not sent:", smsResult.error);
+          }
+        } catch (smsErr) {
+          console.error("Repaired SMS error:", smsErr);
+        }
+      }
+
+      res.json(result.updated);
     } catch (err) {
       console.error("Transition error", err);
       if (err.message === "REPAIR_NOT_FOUND") {
@@ -992,10 +1022,12 @@ router.get(
         return res.status(404).json({ message: "Repair not found" });
       }
       
-      // Double-check assignment
+      // Double-check assignment (with Admin bypass)
+      const isAdmin = req.user.roleCode === "ADMIN" || (req.user.permissions && req.user.permissions.includes("*:*"));
       if (repair.status === REPAIR_STATUS.IN_REPAIR && 
           repair.assignedToUserId && 
-          repair.assignedToUserId !== req.user.id) {
+          String(repair.assignedToUserId) !== String(req.user.id) &&
+          !isAdmin) {
         const assignedUser = await db.User.findByPk(repair.assignedToUserId);
         return res.status(403).json({
           message: `This repair is currently being worked on by ${assignedUser?.name || 'another technician'}. You cannot view its billing.`
@@ -1050,10 +1082,12 @@ router.get("/:id", authenticate, checkRepairAssignment, async (req, res) => {
       return res.status(404).json({ message: "Repair not found" });
     }
     
-    // Double-check assignment
+    // Double-check assignment (with Admin bypass)
+    const isAdmin = req.user.roleCode === "ADMIN" || (req.user.permissions && req.user.permissions.includes("*:*"));
     if (repair.status === REPAIR_STATUS.IN_REPAIR && 
         repair.assignedToUserId && 
-        repair.assignedToUserId !== req.user.id) {
+        String(repair.assignedToUserId) !== String(req.user.id) &&
+        !isAdmin) {
       const assignedUser = await db.User.findByPk(repair.assignedToUserId);
       return res.status(403).json({
         message: `This repair is currently being worked on by ${assignedUser?.name || 'another technician'}.`

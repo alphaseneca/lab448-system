@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "../utils/apiClient.js";
+import { useAuth } from "../state/AuthContext.jsx";
 
 const QrScanPage = () => {
   const [manualToken, setManualToken] = useState("");
@@ -17,10 +18,18 @@ const QrScanPage = () => {
   const [cameraLoading, setCameraLoading] = useState(false);
   const [loadingQueue, setLoadingQueue] = useState(false);
 
+  const [repairInfo, setRepairInfo] = useState(null);
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [pendingToken, setPendingToken] = useState("");
+  const [isStarting, setIsStarting] = useState(false);
+
   const scannerRef = useRef(null);
   const beepRef = useRef(null);
   const scannerContainerId = useRef(null);
   const navigate = useNavigate();
+  const { user, hasRole } = useAuth();
+  const isAdmin = user?.roleCode === "ADMIN" || user?.permissions?.includes("*:*");
+  const isTechnician = hasRole("TECHNICIAN") || isAdmin;
 
   useEffect(() => {
     beepRef.current = new Audio(
@@ -255,7 +264,39 @@ const QrScanPage = () => {
     try {
       const res = await api.get(`/repairs/by-qr/${cleanToken}`);
       console.log("Repair found by QR:", res.data);
-      navigate(`/repairs/${res.data.id}`);
+      
+      const repairData = res.data;
+
+      // If not a technician, just navigate like before
+      if (!isTechnician) {
+        navigate(`/repairs/${repairData.id}`);
+        return;
+      }
+
+      // Technician-specific logic (same as Dashboard)
+      
+      // Check if the repair is already assigned to someone else (with Admin bypass)
+      if (repairData.status === "IN_REPAIR" && 
+          repairData.assignedToUserId && 
+          String(repairData.assignedToUserId) !== String(user?.id) &&
+          !isAdmin) {
+        
+        const techName = repairData.assignedTo?.name || "another technician";
+        setError(`This repair item is already being repaired by ${techName}.`);
+        return;
+      }
+
+      // If already assigned to me and in repair, skip modal and go straight to workspace
+      const isAssignedToMe = repairData.assignedToUserId && String(repairData.assignedToUserId) === String(user?.id);
+      if (repairData.status === "IN_REPAIR" && (isAssignedToMe || isAdmin)) {
+        navigate(`/repairs/${repairData.id}`);
+        return;
+      }
+
+      // Otherwise, show the Start Repair modal
+      setPendingToken(cleanToken);
+      setRepairInfo(repairData);
+      setShowStartModal(true);
       return;
     } catch (err) {
       console.error("QR token lookup failed:", err);
@@ -346,6 +387,38 @@ const QrScanPage = () => {
   `);
     win.document.close();
   };
+
+
+
+  const handleStartRepair = useCallback(async () => {
+    if (!repairInfo) return;
+    const repairId = repairInfo.id;
+    setIsStarting(true);
+
+    try {
+      // Transition to IN_REPAIR if not already there
+      if (repairInfo.status !== "IN_REPAIR") {
+        try {
+          await api.post(`/repairs/${repairId}/transition`, {
+            newStatus: "IN_REPAIR",
+          });
+        } catch (transitionErr) {
+          // If it's already IN_REPAIR (race condition), just ignore
+          if (transitionErr.response?.status !== 400 && transitionErr.response?.status !== 409) {
+            throw transitionErr;
+          }
+        }
+      }
+      
+      setShowStartModal(false);
+      navigate(`/repairs/${repairId}`);
+    } catch (err) {
+      console.error("Failed to start repair:", err);
+      setError(err.response?.data?.message || "Failed to start repair. Please try again.");
+    } finally {
+      setIsStarting(false);
+    }
+  }, [repairInfo, navigate]);
 
   return (
     <div className="content">
@@ -1144,6 +1217,119 @@ const QrScanPage = () => {
           }
         `}
       </style>
+      {/* Start Repair Confirmation Modal (Synchronized with Dashboard) */}
+      <AnimatePresence>
+        {showStartModal && repairInfo && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(2, 16, 24, 0.85)",
+              backdropFilter: "blur(8px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+              padding: "20px",
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="card"
+              style={{
+                maxWidth: "450px",
+                width: "100%",
+                background: "var(--panel)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+                padding: "32px",
+                borderRadius: "24px",
+                textAlign: "center"
+              }}
+            >
+              <div
+                style={{
+                  width: "80px",
+                  height: "80px",
+                  background: "rgba(16, 185, 129, 0.1)",
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 24px",
+                  fontSize: "40px",
+                  border: "1px solid rgba(16, 185, 129, 0.2)"
+                }}
+              >
+                🛠️
+              </div>
+
+              <h2 style={{ margin: "0 0 12px 0", fontSize: "24px", fontWeight: "700" }}>
+                Start This Repair?
+              </h2>
+              <p className="muted" style={{ marginBottom: "24px", fontSize: "15px", lineHeight: "1.6" }}>
+                You are about to start working on <strong>{repairInfo.device?.brand} {repairInfo.device?.model}</strong> for <strong>{repairInfo.customer?.name}</strong>.
+              </p>
+
+              <div style={{ 
+                background: "rgba(255, 255, 255, 0.03)", 
+                borderRadius: "12px", 
+                padding: "16px", 
+                marginBottom: "32px",
+                textAlign: "left"
+              }}>
+                <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
+                  <span className="muted small">Token:</span>
+                  <span style={{ fontWeight: "600", fontFamily: "monospace", color: "var(--accent)" }}>{repairInfo.qrToken}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span className="muted small">Current Status:</span>
+                  <span style={{ 
+                    fontWeight: "600", 
+                    fontSize: "12px", 
+                    padding: "2px 8px", 
+                    borderRadius: "4px",
+                    background: "rgba(255, 255, 255, 0.1)"
+                  }}>{repairInfo.status}</span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "12px" }}>
+                <button
+                  onClick={() => setShowStartModal(false)}
+                  className="btn btn-ghost"
+                  disabled={isStarting}
+                  style={{ flex: 1, padding: "14px", borderRadius: "12px", fontWeight: "600" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleStartRepair}
+                  className="btn btn-primary"
+                  disabled={isStarting}
+                  style={{ 
+                    flex: 2, 
+                    padding: "14px", 
+                    borderRadius: "12px", 
+                    fontWeight: "700",
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    border: "none",
+                    boxShadow: "0 10px 20px rgba(16, 185, 129, 0.2)",
+                    color: "#fff"
+                  }}
+                >
+                  {isStarting ? "Starting..." : "YES, START NOW"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

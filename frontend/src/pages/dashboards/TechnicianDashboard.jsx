@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Html5Qrcode } from "html5-qrcode";
 import { api } from "../../utils/apiClient.js";
 import { useAuth } from "../../state/AuthContext.jsx";
 
@@ -300,6 +301,72 @@ const TechnicianDashboard = () => {
   const [pendingToken, setPendingToken] = useState("");
   const [repairInfo, setRepairInfo] = useState(null);
 
+  const [isScanning, setIsScanning] = useState(false);
+  const scannerRef = useRef(null);
+  const scannerContainerId = useRef(`dashboard-scanner-${Date.now()}`);
+
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      } catch (err) {
+        console.warn("Error stopping scanner:", err);
+      }
+      scannerRef.current = null;
+    }
+    setIsScanning(false);
+  }, []);
+
+  const startScanner = useCallback(async () => {
+    try {
+      setTokenError("");
+      setIsScanning(true);
+
+      // Give React time to render the scanner container
+      setTimeout(async () => {
+        try {
+          const html5Qrcode = new Html5Qrcode(scannerContainerId.current);
+          scannerRef.current = html5Qrcode;
+
+          const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+          };
+
+          await html5Qrcode.start(
+            { facingMode: "environment" },
+            config,
+            (decodedText) => {
+              console.log("Dashboard QR Scanned:", decodedText);
+              handleTokenWithConfirmation(decodedText);
+              stopScanner();
+            },
+            (errorMessage) => {
+              // Ignore scan errors as they are frequent while searching
+            }
+          );
+        } catch (err) {
+          console.error("Failed to start camera:", err);
+          setTokenError("Failed to start camera. Please ensure permissions are granted.");
+          setIsScanning(false);
+        }
+      }, 100);
+    } catch (err) {
+      console.error("Scanner error:", err);
+      setIsScanning(false);
+    }
+  }, [handleTokenWithConfirmation, stopScanner]);
+
+  useEffect(() => {
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {});
+      }
+    };
+  }, []);
+
   const tokenInputRef = useRef(null);
 
   const isTechnicianUser = hasRole("TECHNICIAN") || hasRole("ADMIN");
@@ -322,10 +389,12 @@ const TechnicianDashboard = () => {
     const response = await api.get(`/repairs/by-qr/${trimmedToken}`);
 
     if (response.data && response.data.id) {
-      // Check if the repair is already assigned to someone else
+      // Check if the repair is already assigned to someone else (with Admin bypass)
+      const isAdmin = user?.roleCode === "ADMIN" || user?.permissions?.includes("*:*");
       if (response.data.status === "IN_REPAIR" && 
           response.data.assignedToUserId && 
-          response.data.assignedToUserId !== user?.id) {
+          String(response.data.assignedToUserId) !== String(user?.id) &&
+          !isAdmin) {
         
         // Get the technician name from the response
         const techName = response.data.assignedTo?.name || "another technician";
@@ -337,6 +406,13 @@ const TechnicianDashboard = () => {
       }
       
       // If not assigned or assigned to current user, proceed with modal
+      // If already assigned to me and in repair, skip modal and go straight to workspace
+      const isAssignedToMe = response.data.assignedToUserId && String(response.data.assignedToUserId) === String(user?.id);
+      if (response.data.status === "IN_REPAIR" && (isAssignedToMe || isAdmin)) {
+        navigate(`/repairs/${response.data.id}`);
+        return;
+      }
+
       setPendingToken(trimmedToken);
       setRepairInfo(response.data);
       setShowStartModal(true);
@@ -607,28 +683,78 @@ const TechnicianDashboard = () => {
         </div>
 
         <div style={{ marginBottom: "20px" }}>
-          <button
-            onClick={() => navigate("/qr-scan")}
-            className="btn btn-primary"
-            style={{
-              width: "100%",
-              padding: "16px",
-              fontSize: "16px",
-              fontWeight: 700,
-              background: "linear-gradient(135deg, #10b981, #059669)",
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "12px",
-              borderRadius: "12px",
-              boxShadow: "0 10px 20px rgba(16, 185, 129, 0.25)",
-              color: "#fff"
-            }}
-          >
-            <span style={{ fontSize: "24px" }}>📸</span>
-            START CAMERA SCANNER
-          </button>
+          {!isScanning ? (
+            <button
+              onClick={startScanner}
+              className="btn btn-primary"
+              style={{
+                width: "100%",
+                padding: "16px",
+                fontSize: "16px",
+                fontWeight: 700,
+                background: "linear-gradient(135deg, #10b981, #059669)",
+                border: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "12px",
+                borderRadius: "12px",
+                boxShadow: "0 10px 20px rgba(16, 185, 129, 0.25)",
+                color: "#fff"
+              }}
+            >
+              <span style={{ fontSize: "24px" }}>📸</span>
+              START CAMERA SCANNER
+            </button>
+          ) : (
+            <div style={{ position: "relative" }}>
+              <div 
+                id={scannerContainerId.current} 
+                style={{ 
+                  width: "100%", 
+                  minHeight: "300px", 
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  background: "#000",
+                  border: "2px solid var(--accent)"
+                }}
+              />
+              <button
+                onClick={stopScanner}
+                className="btn"
+                style={{
+                  position: "absolute",
+                  top: "12px",
+                  right: "12px",
+                  zIndex: 10,
+                  padding: "8px 16px",
+                  background: "rgba(239, 68, 68, 0.9)",
+                  border: "none",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: "12px"
+                }}
+              >
+                Close Scanner
+              </button>
+              <div style={{
+                position: "absolute",
+                bottom: "12px",
+                left: "12px",
+                right: "12px",
+                textAlign: "center",
+                background: "rgba(0,0,0,0.6)",
+                padding: "8px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                color: "#fff",
+                zIndex: 10
+              }}>
+                Point camera at QR code
+              </div>
+            </div>
+          )}
         </div>
 
         <div
