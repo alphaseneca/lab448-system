@@ -602,8 +602,33 @@ const TechnicianDashboard = () => {
               fontWeight: "600",
             }}
           >
-            Quick QR Scan / Manual Token Entry
+            Quick QR Scan / Manual Entry
           </h3>
+        </div>
+
+        <div style={{ marginBottom: "20px" }}>
+          <button
+            onClick={() => navigate("/qr-scan")}
+            className="btn btn-primary"
+            style={{
+              width: "100%",
+              padding: "16px",
+              fontSize: "16px",
+              fontWeight: 700,
+              background: "linear-gradient(135deg, #10b981, #059669)",
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "12px",
+              borderRadius: "12px",
+              boxShadow: "0 10px 20px rgba(16, 185, 129, 0.25)",
+              color: "#fff"
+            }}
+          >
+            <span style={{ fontSize: "24px" }}>📸</span>
+            START CAMERA SCANNER
+          </button>
         </div>
 
         <div
