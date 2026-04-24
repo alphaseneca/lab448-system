@@ -17,7 +17,7 @@ export const REPAIR_STATUS = {
 
 //  Added missing transitions
 export const ALLOWED_STATUS_TRANSITIONS = {
-  INTAKE: ["TO_REPAIR"],
+  INTAKE: ["TO_REPAIR", "IN_REPAIR"],
   // Allow reverting back to INTAKE from TO_REPAIR to support manual corrections
   TO_REPAIR: ["IN_REPAIR", "INTAKE"],
   IN_REPAIR: ["REPAIRED", "UNREPAIRABLE"],
