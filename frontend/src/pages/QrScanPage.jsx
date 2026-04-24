@@ -28,7 +28,8 @@ const QrScanPage = () => {
   const scannerContainerId = useRef(null);
   const navigate = useNavigate();
   const { user, hasRole } = useAuth();
-  const isAdmin = user?.roleCode === "ADMIN" || user?.permissions?.includes("*:*");
+  const isAdmin =
+    user?.roleCode === "ADMIN" || user?.permissions?.includes("*:*");
   const isTechnician = hasRole("TECHNICIAN") || isAdmin;
 
   useEffect(() => {
@@ -40,7 +41,7 @@ const QrScanPage = () => {
   const playBeep = () => {
     try {
       beepRef.current?.play();
-    } catch { }
+    } catch {}
   };
 
   const startScanner = async () => {
@@ -52,7 +53,7 @@ const QrScanPage = () => {
         try {
           await scannerRef.current.stop();
           scannerRef.current.clear();
-        } catch (err) { }
+        } catch (err) {}
         scannerRef.current = null;
       }
 
@@ -121,7 +122,7 @@ const QrScanPage = () => {
           console.log("QR Scanned (front camera):", decodedText);
           handleToken(decodedText);
         },
-        () => { },
+        () => {},
       );
 
       setCameraError("");
@@ -139,7 +140,7 @@ const QrScanPage = () => {
       if (scannerRef.current) {
         try {
           await scannerRef.current.stop();
-        } catch (err) { }
+        } catch (err) {}
         scannerRef.current = null;
       }
     }
@@ -169,7 +170,7 @@ const QrScanPage = () => {
   useEffect(() => {
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => { });
+        scannerRef.current.stop().catch(() => {});
         scannerRef.current = null;
       }
     };
@@ -264,9 +265,16 @@ const QrScanPage = () => {
     try {
       const res = await api.get(`/repairs/by-qr/${cleanToken}`);
       console.log("Repair found by QR:", res.data);
-      
+
       const repairData = res.data;
 
+      const finalizedStatuses = ["REPAIRED", "UNREPAIRABLE", "DELIVERED"];
+      if (finalizedStatuses.includes(repairData.status)) {
+        setError(
+          `This repair is already ${repairData.status.toLowerCase()}. Cannot open.`,
+        );
+        return;
+      }
       // If not a technician, just navigate like before
       if (!isTechnician) {
         navigate(`/repairs/${repairData.id}`);
@@ -274,20 +282,23 @@ const QrScanPage = () => {
       }
 
       // Technician-specific logic (same as Dashboard)
-      
+
       // Check if the repair is already assigned to someone else (with Admin bypass)
-      if (repairData.status === "IN_REPAIR" && 
-          repairData.assignedToUserId && 
-          String(repairData.assignedToUserId) !== String(user?.id) &&
-          !isAdmin) {
-        
+      if (
+        repairData.status === "IN_REPAIR" &&
+        repairData.assignedToUserId &&
+        String(repairData.assignedToUserId) !== String(user?.id) &&
+        !isAdmin
+      ) {
         const techName = repairData.assignedTo?.name || "another technician";
         setError(`This repair item is already being repaired by ${techName}.`);
         return;
       }
 
       // If already assigned to me and in repair, skip modal and go straight to workspace
-      const isAssignedToMe = repairData.assignedToUserId && String(repairData.assignedToUserId) === String(user?.id);
+      const isAssignedToMe =
+        repairData.assignedToUserId &&
+        String(repairData.assignedToUserId) === String(user?.id);
       if (repairData.status === "IN_REPAIR" && (isAssignedToMe || isAdmin)) {
         navigate(`/repairs/${repairData.id}`);
         return;
@@ -388,8 +399,6 @@ const QrScanPage = () => {
     win.document.close();
   };
 
-
-
   const handleStartRepair = useCallback(async () => {
     if (!repairInfo) return;
     const repairId = repairInfo.id;
@@ -404,17 +413,23 @@ const QrScanPage = () => {
           });
         } catch (transitionErr) {
           // If it's already IN_REPAIR (race condition), just ignore
-          if (transitionErr.response?.status !== 400 && transitionErr.response?.status !== 409) {
+          if (
+            transitionErr.response?.status !== 400 &&
+            transitionErr.response?.status !== 409
+          ) {
             throw transitionErr;
           }
         }
       }
-      
+
       setShowStartModal(false);
       navigate(`/repairs/${repairId}`);
     } catch (err) {
       console.error("Failed to start repair:", err);
-      setError(err.response?.data?.message || "Failed to start repair. Please try again.");
+      setError(
+        err.response?.data?.message ||
+          "Failed to start repair. Please try again.",
+      );
     } finally {
       setIsStarting(false);
     }
@@ -1249,7 +1264,7 @@ const QrScanPage = () => {
                 boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
                 padding: "32px",
                 borderRadius: "24px",
-                textAlign: "center"
+                textAlign: "center",
               }}
             >
               <div
@@ -1263,39 +1278,78 @@ const QrScanPage = () => {
                   justifyContent: "center",
                   margin: "0 auto 24px",
                   fontSize: "40px",
-                  border: "1px solid rgba(16, 185, 129, 0.2)"
+                  border: "1px solid rgba(16, 185, 129, 0.2)",
                 }}
               >
                 🛠️
               </div>
 
-              <h2 style={{ margin: "0 0 12px 0", fontSize: "24px", fontWeight: "700" }}>
+              <h2
+                style={{
+                  margin: "0 0 12px 0",
+                  fontSize: "24px",
+                  fontWeight: "700",
+                }}
+              >
                 Start This Repair?
               </h2>
-              <p className="muted" style={{ marginBottom: "24px", fontSize: "15px", lineHeight: "1.6" }}>
-                You are about to start working on <strong>{repairInfo.device?.brand} {repairInfo.device?.model}</strong> for <strong>{repairInfo.customer?.name}</strong>.
+              <p
+                className="muted"
+                style={{
+                  marginBottom: "24px",
+                  fontSize: "15px",
+                  lineHeight: "1.6",
+                }}
+              >
+                You are about to start working on{" "}
+                <strong>
+                  {repairInfo.device?.brand} {repairInfo.device?.model}
+                </strong>{" "}
+                for <strong>{repairInfo.customer?.name}</strong>.
               </p>
 
-              <div style={{ 
-                background: "rgba(255, 255, 255, 0.03)", 
-                borderRadius: "12px", 
-                padding: "16px", 
-                marginBottom: "32px",
-                textAlign: "left"
-              }}>
-                <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  background: "rgba(255, 255, 255, 0.03)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  marginBottom: "32px",
+                  textAlign: "left",
+                }}
+              >
+                <div
+                  style={{
+                    marginBottom: "8px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
                   <span className="muted small">Token:</span>
-                  <span style={{ fontWeight: "600", fontFamily: "monospace", color: "var(--accent)" }}>{repairInfo.qrToken}</span>
+                  <span
+                    style={{
+                      fontWeight: "600",
+                      fontFamily: "monospace",
+                      color: "var(--accent)",
+                    }}
+                  >
+                    {repairInfo.qrToken}
+                  </span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between" }}
+                >
                   <span className="muted small">Current Status:</span>
-                  <span style={{ 
-                    fontWeight: "600", 
-                    fontSize: "12px", 
-                    padding: "2px 8px", 
-                    borderRadius: "4px",
-                    background: "rgba(255, 255, 255, 0.1)"
-                  }}>{repairInfo.status}</span>
+                  <span
+                    style={{
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      background: "rgba(255, 255, 255, 0.1)",
+                    }}
+                  >
+                    {repairInfo.status}
+                  </span>
                 </div>
               </div>
 
@@ -1304,7 +1358,12 @@ const QrScanPage = () => {
                   onClick={() => setShowStartModal(false)}
                   className="btn btn-ghost"
                   disabled={isStarting}
-                  style={{ flex: 1, padding: "14px", borderRadius: "12px", fontWeight: "600" }}
+                  style={{
+                    flex: 1,
+                    padding: "14px",
+                    borderRadius: "12px",
+                    fontWeight: "600",
+                  }}
                 >
                   Cancel
                 </button>
@@ -1312,15 +1371,15 @@ const QrScanPage = () => {
                   onClick={handleStartRepair}
                   className="btn btn-primary"
                   disabled={isStarting}
-                  style={{ 
-                    flex: 2, 
-                    padding: "14px", 
-                    borderRadius: "12px", 
+                  style={{
+                    flex: 2,
+                    padding: "14px",
+                    borderRadius: "12px",
                     fontWeight: "700",
                     background: "linear-gradient(135deg, #10b981, #059669)",
                     border: "none",
                     boxShadow: "0 10px 20px rgba(16, 185, 129, 0.2)",
-                    color: "#fff"
+                    color: "#fff",
                   }}
                 >
                   {isStarting ? "Starting..." : "YES, START NOW"}

@@ -318,47 +318,7 @@ const TechnicianDashboard = () => {
     setIsScanning(false);
   }, []);
 
-  const startScanner = useCallback(async () => {
-    try {
-      setTokenError("");
-      setIsScanning(true);
-
-      // Give React time to render the scanner container
-      setTimeout(async () => {
-        try {
-          const html5Qrcode = new Html5Qrcode(scannerContainerId.current);
-          scannerRef.current = html5Qrcode;
-
-          const config = {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-          };
-
-          await html5Qrcode.start(
-            { facingMode: "environment" },
-            config,
-            (decodedText) => {
-              console.log("Dashboard QR Scanned:", decodedText);
-              handleTokenWithConfirmation(decodedText);
-              stopScanner();
-            },
-            (errorMessage) => {
-              // Ignore scan errors as they are frequent while searching
-            }
-          );
-        } catch (err) {
-          console.error("Failed to start camera:", err);
-          setTokenError("Failed to start camera. Please ensure permissions are granted.");
-          setIsScanning(false);
-        }
-      }, 100);
-    } catch (err) {
-      console.error("Scanner error:", err);
-      setIsScanning(false);
-    }
-  }, [handleTokenWithConfirmation, stopScanner]);
-
+  
   useEffect(() => {
     return () => {
       if (scannerRef.current) {
@@ -389,6 +349,13 @@ const TechnicianDashboard = () => {
     const response = await api.get(`/repairs/by-qr/${trimmedToken}`);
 
     if (response.data && response.data.id) {
+ const finalizedStatuses = ["REPAIRED", "UNREPAIRABLE", "DELIVERED"];
+    if (finalizedStatuses.includes(response.data.status)) {
+      setTokenError(`This repair is already ${response.data.status.toLowerCase()}. Cannot start.`);
+      setProcessingToken(false);
+      return;
+    }
+
       // Check if the repair is already assigned to someone else (with Admin bypass)
       const isAdmin = user?.roleCode === "ADMIN" || user?.permissions?.includes("*:*");
       if (response.data.status === "IN_REPAIR" && 
@@ -433,7 +400,49 @@ const TechnicianDashboard = () => {
   } finally {
     setProcessingToken(false);
   }
-}, [user?.id]);
+}, [user?.id,navigate]);
+
+ const startScanner = useCallback(async () => {
+    try {
+      setTokenError("");
+      setIsScanning(true);
+
+      // Give React time to render the scanner container
+      setTimeout(async () => {
+        try {
+          const html5Qrcode = new Html5Qrcode(scannerContainerId.current);
+          scannerRef.current = html5Qrcode;
+
+          const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+          };
+
+          await html5Qrcode.start(
+            { facingMode: "environment" },
+            config,
+            (decodedText) => {
+              // console.log("Dashboard QR Scanned:", decodedText);
+              handleTokenWithConfirmation(decodedText);
+              stopScanner();
+            },
+            (errorMessage) => {
+              // Ignore scan errors as they are frequent while searching
+            }
+          );
+        } catch (err) {
+          console.error("Failed to start camera:", err);
+          setTokenError("Failed to start camera. Please ensure permissions are granted.");
+          setIsScanning(false);
+        }
+      }, 100);
+    } catch (err) {
+      console.error("Scanner error:", err);
+      setIsScanning(false);
+    }
+  }, [handleTokenWithConfirmation, stopScanner]);
+
 
   
   const handleStartRepair = useCallback(async () => {
@@ -447,12 +456,14 @@ const TechnicianDashboard = () => {
       const repairId = repairInfo.id;
 
       // Only transition if not already IN_REPAIR
-      if (repairInfo.status !== "IN_REPAIR") {
+     if ( repairInfo.status !== "IN_REPAIR") {
         try {
           await api.post(`/repairs/${repairId}/transition`, {
             newStatus: "IN_REPAIR",
           });
-        } catch (transitionErr) {
+        } 
+        
+        catch (transitionErr) {
           
           if (transitionErr.response?.status === 409) {
             
@@ -470,14 +481,9 @@ const TechnicianDashboard = () => {
        
       navigate(`/repairs/${repairId}`);
     } catch (err) {
-      console.error("Error starting repair:", err);
-      if (err.response?.status === 409) {
-        setTokenError(err.response.data.message || "This repair is already being worked on by another technician.");
-      } else if (err.response?.status === 400 && err.response.data.message?.includes("Invalid status transition")) {
-        setTokenError("This repair cannot be started (invalid status).");
-      } else {
-        setTokenError("Failed to start repair. Please try again.");
-      }
+       console.error("Full error:", err);
+  const realMessage = err.response?.data?.message || err.message;
+  setTokenError(realMessage);   
     } finally {
       setProcessingToken(false);
       setPendingToken("");
@@ -538,6 +544,7 @@ const TechnicianDashboard = () => {
       window.removeEventListener("paste", handleGlobalPaste);
     };
   }, [isTechnicianUser, handleTokenWithConfirmation]);
+  
 
   // --- FIX: Dashboard data fetching ---
   useEffect(() => {
@@ -709,6 +716,7 @@ const TechnicianDashboard = () => {
           ) : (
             <div style={{ position: "relative" }}>
               <div 
+                key={Date.now()}
                 id={scannerContainerId.current} 
                 style={{ 
                   width: "100%", 
