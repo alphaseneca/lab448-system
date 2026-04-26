@@ -43,7 +43,7 @@ router.get("/lookup", authorizeAny([PERMISSIONS.MANAGE_INVENTORY, PERMISSIONS.US
     const item = await db.Inventory.findOne({
       where: {
         isActive: true,
-        [Op.or]: [{ id: key }, { sku: key }],
+        [Op.or]: [{ id: key }, { sku: key }, { name: { [Op.iLike]: `%${key}%` } }],
       },
     });
     if (!item) {

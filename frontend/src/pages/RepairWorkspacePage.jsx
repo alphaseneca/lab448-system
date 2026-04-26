@@ -382,7 +382,7 @@ const RepairWorkspacePage = () => {
     setInvError("");
     const key = (itemKey || "").toString().trim();
     if (!key) {
-      setInvError("Enter item ID or SKU");
+      setInvError("Enter item ID, SKU, or Name");
       return;
     }
     try {
@@ -397,6 +397,17 @@ const RepairWorkspacePage = () => {
       await load();
     } catch (err) {
       setInvError(err.response?.data?.message || "Failed to use inventory");
+    }
+  };
+
+  const removeInventoryUsage = async (usageId) => {
+    if (!window.confirm("Are you sure you want to remove this item?")) return;
+    setInvError("");
+    try {
+      await api.delete(`/repairs/${id}/use-inventory/${usageId}`);
+      await load();
+    } catch (err) {
+      setInvError(err.response?.data?.message || "Failed to remove inventory");
     }
   };
   const handleInventoryKeyDown = (e) => {
@@ -888,7 +899,7 @@ const RepairWorkspacePage = () => {
                 value={itemKey}
                 onChange={(e) => setItemKey(e.target.value)}
                 onKeyDown={handleInventoryKeyDown}
-                placeholder="Enter item ID or SKU"
+                placeholder="Enter item ID, SKU, or Name"
                 style={{
                   width: "100%",
                   padding: "10px 12px",
@@ -1014,6 +1025,9 @@ const RepairWorkspacePage = () => {
                 >
                   Amount
                 </th>
+                {hasPermission(PERMISSIONS.USE_INVENTORY) && (
+                  <th style={{ padding: "10px 8px", width: "40px" }}></th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1032,12 +1046,33 @@ const RepairWorkspacePage = () => {
                   <td style={{ padding: "10px 8px", textAlign: "right" }}>
                     ₹{(Number(u.unitPriceAtUse) * u.quantityUsed).toFixed(2)}
                   </td>
+                  {hasPermission(PERMISSIONS.USE_INVENTORY) && (
+                    <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                      {!repair.isLocked && (
+                        <button
+                          type="button"
+                          onClick={() => removeInventoryUsage(u.id)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#f87171",
+                            cursor: "pointer",
+                            padding: "4px 8px",
+                            fontSize: "14px",
+                          }}
+                          title="Remove item"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {(repair.inventoryUsage || []).length === 0 && (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={hasPermission(PERMISSIONS.USE_INVENTORY) ? 5 : 4}
                     className="small muted"
                     style={{ padding: "20px", textAlign: "center" }}
                   >

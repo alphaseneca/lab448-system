@@ -305,7 +305,7 @@ router.post(
         }
 
         const frontdeskCharge = getFrontdeskCharge();
-        if (frontdeskCharge > 0) {
+        if (frontdeskCharge >= 0) {
           await db.RepairCharge.create(
             {
               repairId: repair.id,
@@ -610,7 +610,7 @@ router.post(
         } else {
           const key = String(itemKey).trim();
           inventory = await db.Inventory.findOne({
-            where: { isActive: true, [Op.or]: [{ id: key }, { sku: key }] },
+            where: { isActive: true, [Op.or]: [{ id: key }, { sku: key }, { name: { [Op.iLike]: `%${key}%` } }] },
             transaction: t,
           });
         }
@@ -702,6 +702,101 @@ router.post(
   },
 );
 
+// Remove inventory from a repair: atomically increment stock, delete charge and usage
+router.delete(
+  "/:id/use-inventory/:usageId",
+  authorize([PERMISSIONS.USE_INVENTORY]),
+  checkRepairAssignment,
+  async (req, res) => {
+    const { id, usageId } = req.params;
+
+    try {
+      const result = await sequelize.transaction(async (t) => {
+        const repair = await db.Repair.findByPk(id, { 
+          lock: t.LOCK.UPDATE,
+          transaction: t 
+        });
+        
+        if (!repair) {
+          throw new Error("REPAIR_NOT_FOUND");
+        }
+        
+        // Double-check assignment within transaction
+        if (repair.status === REPAIR_STATUS.IN_REPAIR && 
+            repair.assignedToUserId && 
+            String(repair.assignedToUserId) !== String(req.user.id)) {
+          const assignedUser = await db.User.findByPk(repair.assignedToUserId, { transaction: t });
+          throw new Error(`ALREADY_ASSIGNED:${assignedUser?.name || 'another technician'}`);
+        }
+        
+        if (repair.isLocked) {
+          throw new Error("BILL_LOCKED");
+        }
+
+        const usage = await db.InventoryUsage.findByPk(usageId, { transaction: t });
+        if (!usage || String(usage.repairId) !== String(id)) {
+          throw new Error("USAGE_NOT_FOUND");
+        }
+
+        const inventory = await db.Inventory.findByPk(usage.inventoryId, { transaction: t });
+        if (inventory) {
+          await inventory.increment("quantity", { by: usage.quantityUsed, transaction: t });
+        }
+
+        // Find and delete the associated charge
+        const charge = await db.RepairCharge.findOne({
+          where: { sourceInventoryUsageId: usage.id },
+          transaction: t
+        });
+        if (charge) {
+          await charge.destroy({ transaction: t });
+        }
+
+        await usage.destroy({ transaction: t });
+
+        await recalcRepairTotals(id, t);
+
+        await logAudit(
+          {
+            userId: req.user.id,
+            repairId: id,
+            entityType: "Repair",
+            entityId: id,
+            action: "INVENTORY_REMOVED",
+            metadata: {
+              inventoryId: usage.inventoryId,
+              quantity: usage.quantityUsed,
+            },
+          },
+          t,
+        );
+
+        return { success: true };
+      });
+
+      res.status(200).json(result);
+    } catch (err) {
+      console.error("Remove inventory error", err);
+      if (err.message === "REPAIR_NOT_FOUND") {
+        return res.status(404).json({ message: "Repair not found" });
+      }
+      if (err.message === "USAGE_NOT_FOUND") {
+        return res.status(404).json({ message: "Inventory usage not found" });
+      }
+      if (err.message.startsWith("ALREADY_ASSIGNED:")) {
+        const techName = err.message.split(":")[1];
+        return res.status(403).json({
+          message: `This repair is currently being worked on by ${techName}. You cannot modify it.`
+        });
+      }
+      if (err.message === "BILL_LOCKED") {
+        return res.status(400).json({ message: "Repair bill is locked" });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
 // Add a manual charge (e.g. labor)
 router.post(
   "/:id/add-charge",
@@ -789,7 +884,6 @@ router.post(
     try {
       const result = await sequelize.transaction(async (t) => {
         const repair = await db.Repair.findByPk(id, {
-          include: [{ model: db.Payment, as: "payments" }],
           lock: t.LOCK.UPDATE,
           transaction: t,
         });
@@ -797,6 +891,12 @@ router.post(
         if (!repair) {
           throw new Error("REPAIR_NOT_FOUND");
         }
+
+        const payments = await db.Payment.findAll({
+          where: { repairId: id },
+          transaction: t,
+        });
+        repair.payments = payments;
         
         // Double-check assignment within transaction
         if (repair.status === REPAIR_STATUS.IN_REPAIR && 
