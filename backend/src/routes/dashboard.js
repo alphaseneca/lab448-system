@@ -563,6 +563,15 @@ router.get("/finance", finOrAdmin, async (req, res) => {
       recent_payments: allPayments,
       pending_bills: pendingBills.slice(0, 30),
       pending_bills_by_customer: pendingBillsByCustomer,
+      ready_to_deliver: repairsWithPayments.map((r) => {
+        const paid = r.payments.reduce((s, p) => s + Number(p.amount), 0);
+        const due = Number(r.totalCharges) - paid;
+        return {
+          ...r.toJSON(),
+          paid,
+          due,
+        };
+      }),
     });
   } catch (err) {
     console.error("Finance dashboard error", err);

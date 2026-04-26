@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../utils/apiClient.js";
 
+// Add a bomb blast feature. When the user clicks on the "Mark Delivered" button, it should play a bomb blast sound and a visual effect.
+// The user can also undo the action within 5 seconds. 
+
 const StatCard = ({ label, value, icon, gradient }) => (
   <div
     className="card"
@@ -68,36 +71,50 @@ const BillingPaymentsDashboard = () => {
     );
   }
 
+  const handleDeliver = async (repairId) => {
+    if (!window.confirm("Mark this item as delivered?")) return;
+    try {
+      await api.post(`/repairs/${repairId}/transition`, { newStatus: "DELIVERED" });
+      // Refresh data
+      const res = await api.get("/dashboard/finance");
+      setData(res.data);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to mark as delivered");
+    }
+  };
+
   const today = data?.today_collections ?? 0;
   const month = data?.current_month || {};
   const recent = data?.recent_payments || [];
+  const readyToDeliver = data?.ready_to_deliver || [];
   // Prefer backend-grouped list (one row per customer); fallback to client-side grouping
   const pendingBillsByCustomer = data?.pending_bills_by_customer;
   const pendingRaw = data?.pending_bills || [];
   const pending = Array.isArray(pendingBillsByCustomer)
     ? pendingBillsByCustomer
     : (() => {
-        const pendingByCustomer = pendingRaw.reduce((acc, r) => {
-          const cid = r.customerId ?? r.customer?.id ?? null;
-          const key = cid ? String(cid) : `repair-${r.id}`;
-          if (!acc[key]) {
-            acc[key] = {
-              customerId: cid ?? key,
-              customerName: r.customer?.name ?? "—",
-              due: 0,
-              repairs: [],
-              firstRepairId: r.id,
-              qrTokens: [],
-            };
-          }
-          acc[key].due += Number(r.due ?? 0);
-          acc[key].repairs.push(r);
-          acc[key].qrTokens = acc[key].qrTokens || [];
-          acc[key].qrTokens.push(r.qrToken);
-          return acc;
-        }, {});
-        return Object.values(pendingByCustomer).filter((c) => c.due > 0);
-      })();
+      const pendingByCustomer = pendingRaw.reduce((acc, r) => {
+        const cid = r.customerId ?? r.customer?.id ?? null;
+        const key = cid ? String(cid) : `repair-${r.id}`;
+        if (!acc[key]) {
+          acc[key] = {
+            customerId: cid ?? key,
+            customerName: r.customer?.name ?? "—",
+            due: 0,
+            repairs: [],
+            firstRepairId: r.id,
+            qrTokens: [],
+          };
+        }
+        acc[key].due += Number(r.due ?? 0);
+        acc[key].repairs.push(r);
+        acc[key].qrTokens = acc[key].qrTokens || [];
+        acc[key].qrTokens.push(r.qrToken);
+        return acc;
+      }, {});
+      return Object.values(pendingByCustomer).filter((c) => c.due > 0);
+    })();
   const breakdown = month.payment_method_breakdown || {};
 
   return (
@@ -152,6 +169,70 @@ const BillingPaymentsDashboard = () => {
         </div>
       )}
 
+      {/* Ready to Deliver Section */}
+      <div className="card" style={{ marginTop: "24px" }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: "18px", fontWeight: 600 }}>📦 Ready to Deliver</h3>
+        {readyToDeliver.length === 0 ? (
+          <p className="muted">No repairs ready for delivery</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                  <th style={{ padding: "12px 8px" }}>QR Token</th>
+                  <th style={{ padding: "12px 8px" }}>Customer</th>
+                  <th style={{ padding: "12px 8px" }}>Device</th>
+                  <th style={{ padding: "12px 8px" }}>Due</th>
+                  <th style={{ padding: "12px 8px" }}>Status</th>
+                  <th style={{ padding: "12px 8px" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {readyToDeliver.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <td style={{ padding: "12px 8px" }}><code>{r.qrToken}</code></td>
+                    <td style={{ padding: "12px 8px" }}>{r.customer?.name}</td>
+                    <td style={{ padding: "12px 8px" }} className="small muted">
+                      {r.device?.brand} {r.device?.model}
+                    </td>
+                    <td style={{ padding: "12px 8px", color: r.due > 0 ? "#f87171" : "#4ade80" }}>
+                      ₹{Number(r.due).toFixed(2)}
+                    </td>
+                    <td style={{ padding: "12px 8px" }}>
+                      <span className="badge" style={{
+                        fontSize: "11px",
+                        padding: "2px 6px",
+                        background: r.status === "REPAIRED" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)",
+                        color: r.status === "REPAIRED" ? "#4ade80" : "#f87171"
+                      }}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 8px" }}>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        {r.due > 0 ? (
+                          <Link to={`/repairs/${r.id}/billing`} className="btn btn-primary" style={{ fontSize: "12px", padding: "6px 12px" }}>
+                            Pay & Deliver
+                          </Link>
+                        ) : (
+                          <button
+                            onClick={() => handleDeliver(r.id)}
+                            className="btn btn-primary"
+                            style={{ fontSize: "12px", padding: "6px 12px", background: "linear-gradient(90deg, #10b981, #059669)" }}
+                          >
+                            Mark Delivered
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginTop: "24px" }}>
         <div className="card">
           <h3 style={{ margin: "0 0 16px", fontSize: "18px", fontWeight: 600 }}>Recent Payments</h3>
@@ -204,13 +285,13 @@ const BillingPaymentsDashboard = () => {
                         {itemCount} item{itemCount !== 1 ? "s" : ""}
                         {repairIds.length > 0 && repairIds.length <= 5
                           ? repairIds.map((rid, idx) => (
-                              <span key={rid}>
-                                {idx > 0 ? ", " : " "}
-                                <Link to={`/repairs/${rid}/billing`} style={{ color: "var(--accent)" }}>
-                                  {tokens[idx] ?? rid}
-                                </Link>
-                              </span>
-                            ))
+                            <span key={rid}>
+                              {idx > 0 ? ", " : " "}
+                              <Link to={`/repairs/${rid}/billing`} style={{ color: "var(--accent)" }}>
+                                {tokens[idx] ?? rid}
+                              </Link>
+                            </span>
+                          ))
                           : tokens.length <= 3 && tokens.length > 0
                             ? ` (${tokens.join(", ")})`
                             : ""}
