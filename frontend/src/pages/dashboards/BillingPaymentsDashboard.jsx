@@ -1,10 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../utils/apiClient.js";
-
-// Add a bomb blast feature. When the user clicks on the "Mark Delivered" button, it should play a bomb blast sound and a visual effect.
-// The user can also undo the action within 5 seconds. 
-
 const StatCard = ({ label, value, icon, gradient }) => (
   <div
     className="card"
@@ -202,8 +198,8 @@ const BillingPaymentsDashboard = () => {
                       <span className="badge" style={{
                         fontSize: "11px",
                         padding: "2px 6px",
-                        background: r.status === "REPAIRED" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)",
-                        color: r.status === "REPAIRED" ? "#4ade80" : "#f87171"
+                        background: "rgba(34, 197, 94, 0.2)",
+                        color: "#4ade80"
                       }}>
                         {r.status}
                       </span>

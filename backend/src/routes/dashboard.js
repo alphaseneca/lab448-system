@@ -483,7 +483,7 @@ router.get("/finance", finOrAdmin, async (req, res) => {
           limit: 50,
         }),
         db.Repair.findAll({
-          where: { status: { [Op.in]: ["REPAIRED", "UNREPAIRABLE"] } },
+          where: { status: "REPAIRED" },
           include: [
             {
               model: db.Customer,
