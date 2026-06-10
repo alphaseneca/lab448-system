@@ -222,7 +222,6 @@ Saved locations for a customer. Supports multiple addresses per customer, GPS co
 | `label` | `varchar(100)` | NOT NULL | e.g., `Home`, `Office`, `Shop` |
 | `address_line` | `text` | nullable | Street-level address (house no., road name, landmark) |
 | `city_district` | `varchar(150)` | nullable | City or district name: `Kathmandu`, `Lalitpur`, `Bhaktapur` |
-| `nearest_branch` | `varchar(150)` | nullable | Nearest shop branch or landmark for logistics routing — e.g., `LAB448 Thamel` or `Near Boudha Stupa`. More levels of resolution (ward, sub-area) can be added later as proper address fields once address standards are defined. |
 | `latitude` | `decimal(10,8)` | nullable | GPS latitude — pin dropped by customer on map |
 | `longitude` | `decimal(11,8)` | nullable | GPS longitude — pin dropped by customer on map |
 | `is_default` | `boolean` | NOT NULL, default `false` | Default address used when creating a delivery order |

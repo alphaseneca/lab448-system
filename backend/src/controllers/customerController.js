@@ -82,7 +82,6 @@ export const createCustomer = async (req, res) => {
         label: primaryAddress.label || "Primary",
         addressLine: primaryAddress.addressLine || null,
         cityDistrict: primaryAddress.cityDistrict || null,
-        nearestBranch: primaryAddress.nearestBranch || null,
         latitude: primaryAddress.latitude || null,
         longitude: primaryAddress.longitude || null,
         plusCode: primaryAddress.plusCode || null,
@@ -187,7 +186,7 @@ export const deleteCustomer = async (req, res) => {
 
 export const addCustomerAddress = async (req, res) => {
   const { customerId } = req.params;
-  const { label, addressLine, cityDistrict, nearestBranch, latitude, longitude, plusCode, logisticsCode, isDefault } = req.body;
+  const { label, addressLine, cityDistrict, latitude, longitude, plusCode, logisticsCode, isDefault } = req.body;
 
   if (!label) return res.status(400).json({ message: "Address label is required" });
 
@@ -205,7 +204,6 @@ export const addCustomerAddress = async (req, res) => {
       label,
       addressLine: addressLine || null,
       cityDistrict: cityDistrict || null,
-      nearestBranch: nearestBranch || null,
       latitude: latitude || null,
       longitude: longitude || null,
       plusCode: plusCode || null,
@@ -225,7 +223,7 @@ export const updateCustomerAddress = async (req, res) => {
     const address = await models.CustomerAddress.findByPk(req.params.addressId);
     if (!address) return res.status(404).json({ message: "Address not found" });
 
-    const { label, addressLine, cityDistrict, nearestBranch, latitude, longitude, plusCode, logisticsCode, isDefault } = req.body;
+    const { label, addressLine, cityDistrict, latitude, longitude, plusCode, logisticsCode, isDefault } = req.body;
 
     if (isDefault && !address.isDefault) {
       await models.CustomerAddress.update({ isDefault: false }, { where: { customerId: address.customerId } });
@@ -235,7 +233,6 @@ export const updateCustomerAddress = async (req, res) => {
       label: label !== undefined ? label : address.label,
       addressLine: addressLine !== undefined ? addressLine : address.addressLine,
       cityDistrict: cityDistrict !== undefined ? cityDistrict : address.cityDistrict,
-      nearestBranch: nearestBranch !== undefined ? nearestBranch : address.nearestBranch,
       latitude: latitude !== undefined ? latitude : address.latitude,
       longitude: longitude !== undefined ? longitude : address.longitude,
       plusCode: plusCode !== undefined ? plusCode : address.plusCode,

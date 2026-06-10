@@ -29,11 +29,6 @@ export default (sequelize) => {
         allowNull: true,
         field: "city_district",
       },
-      nearestBranch: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: "nearest_branch",
-      },
       latitude: {
         type: DataTypes.DECIMAL(10, 8),
         allowNull: true,

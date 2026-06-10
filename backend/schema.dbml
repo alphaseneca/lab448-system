@@ -89,7 +89,6 @@ Table customer_addresses {
   label varchar [not null, note: 'e.g. Home, Office']
   address_line text
   city_district varchar
-  nearest_branch varchar
   latitude decimal(10,8)
   longitude decimal(11,8)
   plus_code text [note: 'Google Maps share URL (https://maps.app.goo.gl/...) or Plus Code (e.g. 7JCW+2C Kathmandu)']
