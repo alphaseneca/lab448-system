@@ -4,6 +4,9 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { api } from '../services/api';
 import { APP_ROUTES } from '../constants/routes';
 import { REPAIR_STATUS_LABELS } from '../constants/constants';
+import Modal, { ModalHeader, ModalBody, ModalFooter } from '../components/Modal';
+import { QRCodeSVG } from 'qrcode.react';
+import QrLabelPrint, { printQrLabel, getQrLabelConfig } from '../utils/printService';
 
 export default function QrScanPage() {
   const navigate = useNavigate();
@@ -16,13 +19,36 @@ export default function QrScanPage() {
   const [queue, setQueue] = useState([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueFilter, setQueueFilter] = useState('');
+  const [qrModal, setQrModal] = useState(null);
+  const [labelConfig, setLabelConfig] = useState({});
+  const [cameras, setCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
 
   const scannerRef = useRef(null);
+  const qrPrintRef = useRef(null);
   const qrReaderId = 'qr-scanner-viewport';
 
-  // ── Load queue ────────────────────────────────────────────────────
+  const playBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    } catch (e) {
+      console.warn('Audio Context beep failed', e);
+    }
+  };
+
+  // ── Load queue & label config ─────────────────────────────────────
   useEffect(() => {
     loadQueue();
+    getQrLabelConfig().then(setLabelConfig);
   }, []);
 
   const loadQueue = async () => {
@@ -54,33 +80,72 @@ export default function QrScanPage() {
     if (el) el.innerHTML = '';
 
     try {
+      const devices = await Html5Qrcode.getCameras();
+      setCameras(devices || []);
+      
       const scanner = new Html5Qrcode(qrReaderId);
       scannerRef.current = scanner;
+
+      let cameraConfig = { facingMode: 'environment' };
+      if (selectedCameraId) {
+        cameraConfig = selectedCameraId;
+      } else if (devices && devices.length > 0) {
+        const backCamera = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment'));
+        cameraConfig = backCamera ? backCamera.id : devices[0].id;
+        setSelectedCameraId(cameraConfig);
+      }
+
       await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
+        cameraConfig,
+        {
+          fps: 30,
+          qrbox: (width, height) => {
+            const minEdge = Math.min(width, height);
+            const qrboxSize = Math.floor(minEdge * 0.7);
+            return { width: qrboxSize, height: qrboxSize };
+          },
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+          }
+        },
         (decodedText) => handleToken(decodedText),
         () => {}
       );
       setCameraLoading(false);
       setScanning(true);
-    } catch {
-      // Try front camera
+    } catch (err) {
+      console.error(err);
+      setCameraError('Camera access denied or device error. Please grant permissions and try again.');
+      setCameraLoading(false);
+      scannerRef.current = null;
+    }
+  };
+
+  const handleCameraChange = async (e) => {
+    const newId = e.target.value;
+    setSelectedCameraId(newId);
+    if (scanning && scannerRef.current) {
       try {
-        const scanner = new Html5Qrcode(qrReaderId);
-        scannerRef.current = scanner;
-        await scanner.start(
-          { facingMode: 'user' },
-          { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
+        await scannerRef.current.stop();
+        await scannerRef.current.start(
+          newId,
+          {
+            fps: 30,
+            qrbox: (width, height) => {
+              const minEdge = Math.min(width, height);
+              const qrboxSize = Math.floor(minEdge * 0.7);
+              return { width: qrboxSize, height: qrboxSize };
+            },
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            }
+          },
           (decodedText) => handleToken(decodedText),
           () => {}
         );
-        setCameraLoading(false);
-        setScanning(true);
-      } catch {
-        setCameraError('Camera access denied. Please grant camera permissions and try again.');
-        setCameraLoading(false);
-        scannerRef.current = null;
+      } catch (err) {
+        console.error(err);
+        setCameraError('Failed to switch camera.');
       }
     }
   };
@@ -107,6 +172,7 @@ export default function QrScanPage() {
     setError('');
     try {
       const res = await api.get(`/repair-orders/by-qr/${token.trim()}`);
+      playBeep();
       navigate(APP_ROUTES.REPAIR_ORDER_DETAILS(res.data.id));
     } catch (err) {
       const status = err.response?.status;
@@ -152,7 +218,7 @@ export default function QrScanPage() {
   };
 
   return (
-    <div className="animate-fade-in flex flex-col gap-6 max-w-6xl mx-auto pb-12">
+    <div className="animate-fade-in flex flex-col gap-6 w-full pb-12">
       <header>
         <h1 className="text-3xl font-extrabold mb-1">QR Scanner</h1>
         <p className="text-secondary">Scan a device QR code or search the active repair queue.</p>
@@ -193,23 +259,59 @@ export default function QrScanPage() {
             )}
           </div>
 
-          {/* Scanner viewport */}
-          <div id={qrReaderId}
-            className="rounded-lg overflow-hidden flex items-center justify-center"
-            style={{ minHeight: 280, background: scanning ? '#000' : 'var(--surface)', border: '1px solid rgba(255,255,255,0.06)', position: 'relative' }}>
+          {cameras.length > 1 && (
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-secondary">Select Camera Device</label>
+              <select 
+                value={selectedCameraId} 
+                onChange={handleCameraChange}
+                className="w-full bg-surface border border-panel text-text-primary text-sm rounded-md px-3 py-2 cursor-pointer focus:outline-none"
+              >
+                {cameras.map((cam) => (
+                  <option key={cam.id} value={cam.id}>
+                    {cam.label || `Camera ${cam.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Scanner viewport container */}
+          <div 
+            className="rounded-lg overflow-hidden border border-panel bg-surface relative"
+            style={{ minHeight: 280 }}
+          >
+            {/* The actual viewport target for html5-qrcode */}
+            <div 
+              id={qrReaderId} 
+              style={{ width: '100%', height: '100%', minHeight: 280 }} 
+            />
+
+            {/* React overlays */}
             {!scanning && !cameraLoading && (
-              <div className="text-center text-muted p-8">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-muted p-8 bg-surface pointer-events-none">
                 <span className="material-symbols-rounded" style={{ fontSize: '48px', opacity: 0.4 }}>qr_code_scanner</span>
                 <p className="text-sm mt-3">Click "Start Camera" to activate</p>
               </div>
             )}
+            
+            {cameraLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-muted p-8 bg-surface/80 backdrop-blur-sm z-10 pointer-events-none">
+                <span className="material-symbols-rounded animate-spin text-accent-primary" style={{ fontSize: '32px' }}>progress_activity</span>
+                <p className="text-sm mt-3">Initializing camera...</p>
+              </div>
+            )}
+            
             {scanning && (
-              <div style={{
-                position: 'absolute', width: 240, height: 240,
-                border: '2px solid var(--accent-primary)', borderRadius: 8,
-                pointerEvents: 'none', zIndex: 5,
-                boxShadow: '0 0 0 4000px rgba(0,0,0,0.4)',
-              }} />
+              <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
+                <div style={{
+                  width: 240, 
+                  height: 240,
+                  border: '2px solid var(--accent-primary)', 
+                  borderRadius: 8,
+                  boxShadow: '0 0 0 4000px rgba(0,0,0,0.4)',
+                }} />
+              </div>
             )}
           </div>
 
@@ -251,8 +353,12 @@ export default function QrScanPage() {
           </h2>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted">{filteredQueue.length} orders</span>
-            <button className="btn btn-ghost text-xs" onClick={loadQueue} disabled={queueLoading}>
-              <span className={`material-symbols-rounded icon-sm ${queueLoading ? 'animate-spin' : ''}`}>refresh</span>
+            <button className="btn btn-ghost text-xs" onClick={loadQueue} disabled={queueLoading} title="Refresh">
+              {queueLoading ? (
+                <span className="loading-spinner spinner-sm"></span>
+              ) : (
+                <span className="material-symbols-rounded icon-sm">refresh</span>
+              )}
             </button>
           </div>
         </div>
@@ -265,7 +371,7 @@ export default function QrScanPage() {
 
         {queueLoading ? (
           <div className="flex items-center justify-center py-12">
-            <span className="material-symbols-rounded icon-lg animate-spin text-accent-primary">progress_activity</span>
+            <span className="loading-spinner spinner-lg text-accent-primary"></span>
           </div>
         ) : filteredQueue.length === 0 ? (
           <div className="text-center py-12 text-muted">
@@ -276,7 +382,7 @@ export default function QrScanPage() {
           <div className="overflow-x-auto rounded-lg border border-panel">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-panel bg-surface/50">
+                <tr className="border-b border-panel bg-secondary/40">
                   <th className="px-4 py-3 text-left text-xs font-bold text-secondary uppercase tracking-wider">Ticket</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-secondary uppercase tracking-wider">Customer</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-secondary uppercase tracking-wider">Device</th>
@@ -289,7 +395,7 @@ export default function QrScanPage() {
                 {filteredQueue.map(r => (
                   <tr key={r.id} className="border-b border-panel last:border-0 hover:bg-surface transition-colors cursor-pointer"
                     onClick={() => navigate(APP_ROUTES.REPAIR_ORDER_DETAILS(r.id))}>
-                    <td className="px-4 py-3 font-mono font-bold text-primary">{r.ticketNumber || '—'}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-text-primary">{r.ticketNumber || '—'}</td>
                     <td className="px-4 py-3 font-semibold">{r.customer?.name || '—'}</td>
                     <td className="px-4 py-3 text-secondary">{r.device?.brand} {r.device?.modelName}</td>
                     <td className="px-4 py-3">
@@ -298,11 +404,20 @@ export default function QrScanPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        className="font-mono text-xs text-muted hover:text-primary flex items-center gap-1 transition-colors"
-                        onClick={ev => { ev.stopPropagation(); copyToken(r.qrToken); }}>
-                        {r.qrToken} <span className="material-symbols-rounded" style={{ fontSize: 14 }}>content_copy</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="font-mono text-xs text-muted hover:text-text-primary flex items-center gap-1 transition-colors"
+                          onClick={ev => { ev.stopPropagation(); copyToken(r.qrToken || r.ticketNumber); }}>
+                          {r.qrToken || r.ticketNumber} <span className="material-symbols-rounded" style={{ fontSize: 14 }}>content_copy</span>
+                        </button>
+                        <button
+                          className="btn btn-ghost p-1 h-auto"
+                          title="Show QR Code"
+                          onClick={ev => { ev.stopPropagation(); setQrModal(r); }}
+                        >
+                          <span className="material-symbols-rounded icon-sm text-accent-primary">qr_code</span>
+                        </button>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="material-symbols-rounded text-muted icon-sm">arrow_forward</span>
@@ -314,6 +429,49 @@ export default function QrScanPage() {
           </div>
         )}
       </section>
+
+      {/* QR Modal */}
+      <Modal isOpen={!!qrModal} onClose={() => setQrModal(null)} maxWidth="max-w-md">
+        <ModalHeader title="QR Code Label" icon="qr_code" onClose={() => setQrModal(null)} />
+        <ModalBody className="flex flex-col items-center gap-6">
+          <div className="text-center">
+            <h3 className="text-lg font-bold">{qrModal?.customer?.name || 'Customer Label'}</h3>
+            <p className="text-xs text-secondary mt-1">
+              {qrModal?.device?.brand} {qrModal?.device?.modelName}
+            </p>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-lg flex flex-col items-center justify-center border border-panel">
+            <QRCodeSVG value={qrModal?.qrToken || qrModal?.ticketNumber || ''} size={200} level="M" />
+            <span className="font-mono text-sm text-black mt-3 font-bold">{qrModal?.qrToken || qrModal?.ticketNumber}</span>
+          </div>
+
+          {/* Hidden print renderer */}
+          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+            <QrLabelPrint
+              ref={qrPrintRef}
+              customerName={qrModal?.customer?.name || ''}
+              qrToken={qrModal?.qrToken || qrModal?.ticketNumber || ''}
+              labelConfig={labelConfig}
+            />
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <button className="btn btn-primary flex-1 flex items-center justify-center gap-2" onClick={() => printQrLabel(qrPrintRef, labelConfig)}>
+            <span className="material-symbols-rounded icon-sm">print</span> Print Label
+          </button>
+          <button className="btn btn-secondary flex-1 flex items-center justify-center gap-2" onClick={() => {
+            const id = qrModal?.id;
+            setQrModal(null);
+            if (id) navigate(APP_ROUTES.REPAIR_ORDER_DETAILS(id));
+          }}>
+            <span className="material-symbols-rounded icon-sm">open_in_new</span> Workspace
+          </button>
+          <button className="btn btn-ghost" onClick={() => copyToken(qrModal?.qrToken || qrModal?.ticketNumber)}>
+            <span className="material-symbols-rounded icon-sm">content_copy</span>
+          </button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

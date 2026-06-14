@@ -24,14 +24,14 @@ const StartRepairModal = ({ isOpen, token, repairInfo, onConfirm, onCancel }) =>
         <div className="mb-4 inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent-primary/20 text-accent-primary mb-4">
           <span className="material-symbols-rounded text-3xl">build</span>
         </div>
-        <h2 className="text-2xl font-bold text-primary tracking-tight mb-2">Start Repair?</h2>
+        <h2 className="text-2xl font-bold text-text-primary tracking-tight mb-2">Start Repair?</h2>
         <p className="text-muted text-sm mb-6 max-w-sm mx-auto">
-          Scan detected for token <strong className="text-primary font-mono">{token}</strong>.
-          This device is a <strong className="text-primary">{repairInfo.device?.brand} {repairInfo.device?.modelName}</strong>.
+          Scan detected for token <strong className="text-text-primary font-mono">{token}</strong>.
+          This device is a <strong className="text-text-primary">{repairInfo.device?.brand} {repairInfo.device?.modelName}</strong>.
         </p>
 
         <div className="flex justify-center gap-4 mt-6">
-          <button ref={noButtonRef} onClick={onCancel} className="btn py-2 px-6 bg-surface hover:bg-surface border border-panel hover:text-primary transition-all">
+          <button ref={noButtonRef} onClick={onCancel} className="btn py-2 px-6 bg-surface hover:bg-surface border border-panel hover:text-text-primary transition-all">
             Cancel
           </button>
           <button ref={yesButtonRef} onClick={onConfirm} className="btn btn-primary py-2 px-8 flex items-center gap-2">
@@ -164,7 +164,7 @@ export default function TechnicianDashboard() {
         await api.post(`/repair-orders/${repairId}/transition`, { newStatus: REPAIR_STATUSES.IN_REPAIR, reason: "Technician explicitly pulled item" });
       }
 
-      navigate(APP_ROUTES.REPAIR_WORKSPACE(repairId));
+      navigate(APP_ROUTES.REPAIR_ORDER_DETAILS(repairId));
     } catch (err) {
       console.error('Error starting repair:', err);
       setTokenError('Failed to start repair. Please try again.');
@@ -206,7 +206,7 @@ export default function TechnicianDashboard() {
   const pending = Array.isArray(data?.pending_repairs) ? data.pending_repairs : [];
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-12 animate-fade-in">
+    <div className="flex flex-col gap-6 w-full pb-12 animate-fade-in">
       
       <StartRepairModal
         isOpen={showStartModal}
@@ -219,7 +219,7 @@ export default function TechnicianDashboard() {
       <header>
         <h1 className="text-2xl font-extrabold tracking-tight">🔧 Technician Dashboard</h1>
         <p className="text-muted text-sm mt-1">
-          Welcome, <strong className="text-primary">{user?.fullName || "Mechanic"}</strong>. Ready to work?
+          Welcome, <strong className="text-text-primary">{user?.fullName || "Mechanic"}</strong>. Ready to work?
         </p>
       </header>
 
@@ -264,7 +264,7 @@ export default function TechnicianDashboard() {
       </div>
 
       {loading ? (
-        <div className="text-center p-12"><span className="material-symbols-rounded animate-spin icon-lg text-accent-primary">refresh</span></div>
+        <div className="text-center p-12"><span className="loading-spinner spinner-lg text-accent-primary"></span></div>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -282,7 +282,7 @@ export default function TechnicianDashboard() {
              </div>
              <div className="card !p-5">
                <div className="text-muted text-xs font-bold uppercase tracking-wider mb-2">Efficiency</div>
-               <div className="text-3xl font-extrabold text-primary">{current.avg_completion_minutes ? `${(current.avg_completion_minutes / 60).toFixed(1)}h` : 'N/A'}</div>
+               <div className="text-3xl font-extrabold text-text-primary">{current.avg_completion_minutes ? `${(current.avg_completion_minutes / 60).toFixed(1)}h` : 'N/A'}</div>
              </div>
           </div>
 
@@ -290,12 +290,12 @@ export default function TechnicianDashboard() {
             
             {/* Active/Assigned Queue */}
             <div className="card !p-0 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-panel bg-surface/30">
+              <div className="p-4 border-b border-panel bg-surface">
                 <h3 className="text-sm uppercase font-bold tracking-wider text-secondary">My Active Assignments ({assigned.length})</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-surface/20 text-xs uppercase tracking-wider text-muted font-bold">
+                  <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted font-bold">
                     <tr>
                       <th className="p-4 py-3 border-b border-panel font-medium">QR Token</th>
                       <th className="p-4 py-3 border-b border-panel font-medium">Device</th>
@@ -306,11 +306,11 @@ export default function TechnicianDashboard() {
                     {assigned.length === 0 ? (
                       <tr><td colSpan="3" className="p-6 text-center text-muted italic">Queue is clear!</td></tr>
                     ) : assigned.map(r => (
-                      <tr key={r.id} className="hover:bg-surface/50 transition-colors">
+                      <tr key={r.id} className="hover:bg-surface transition-colors">
                         <td className="p-4 font-mono font-medium text-xs text-secondary">{r.qrToken || r.ticketNumber}</td>
-                        <td className="p-4 font-bold text-primary">{r.device?.brand} {r.device?.modelName}</td>
+                        <td className="p-4 font-bold text-text-primary">{r.device?.brand} {r.device?.modelName}</td>
                         <td className="p-4 text-right">
-                          <Link to={APP_ROUTES.REPAIR_WORKSPACE(r.id)} className="btn btn-ghost text-xs">Work <span className="material-symbols-rounded icon-sm text-xs">arrow_forward</span></Link>
+                          <Link to={APP_ROUTES.REPAIR_ORDER_DETAILS(r.id)} className="btn btn-ghost text-xs">Work <span className="material-symbols-rounded icon-sm text-xs">arrow_forward</span></Link>
                         </td>
                       </tr>
                     ))}
@@ -326,7 +326,7 @@ export default function TechnicianDashboard() {
               </div>
               <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-surface/20 text-xs uppercase tracking-wider text-muted font-bold sticky top-0 backdrop-blur-md">
+                  <thead className="bg-secondary/40 text-xs uppercase tracking-wider text-muted font-bold sticky top-0 backdrop-blur-md">
                     <tr>
                       <th className="p-4 py-3 border-b border-panel font-medium">Ticket #</th>
                       <th className="p-4 py-3 border-b border-panel font-medium">Device & Issue</th>
@@ -337,10 +337,10 @@ export default function TechnicianDashboard() {
                     {pending.length === 0 ? (
                       <tr><td colSpan="3" className="p-6 text-center text-muted italic text-xs">No pending repairs waiting in shop.</td></tr>
                     ) : pending.map(r => (
-                      <tr key={r.id} className="hover:bg-surface/50 transition-colors text-xs">
+                      <tr key={r.id} className="hover:bg-surface transition-colors text-xs">
                         <td className="p-4 font-mono font-medium text-muted">{r.ticketNumber}</td>
                         <td className="p-4">
-                          <p className="font-bold text-primary mb-0.5">{r.device?.brand} {r.device?.modelName}</p>
+                          <p className="font-bold text-text-primary mb-0.5">{r.device?.brand} {r.device?.modelName}</p>
                           <p className="text-muted max-w-[150px] truncate">{r.intakeNotes || 'No notes'}</p>
                         </td>
                         <td className="p-4 text-right">

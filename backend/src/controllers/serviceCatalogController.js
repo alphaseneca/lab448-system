@@ -31,7 +31,7 @@ export const getServiceById = async (req, res) => {
 };
 
 export const createService = async (req, res) => {
-  const { name, parentId, depth, defaultServiceCharge, estimatedDurationMinutes } = req.body;
+  const { name, parentId, depth, defaultServiceCharge, estimatedDurationMinutes, category } = req.body;
 
   if (!name || depth === undefined) {
     return res.status(400).json({ message: "Name and depth are required" });
@@ -44,6 +44,7 @@ export const createService = async (req, res) => {
       depth,
       defaultServiceCharge: defaultServiceCharge || 0,
       estimatedDurationMinutes: estimatedDurationMinutes || null,
+      category: category || null,
       isActive: true, // Default
     });
 
@@ -72,7 +73,7 @@ export const updateService = async (req, res) => {
     }
 
     const beforeSnapshot = service.toJSON();
-    const { name, parentId, depth, defaultServiceCharge, estimatedDurationMinutes, isActive } = req.body;
+    const { name, parentId, depth, defaultServiceCharge, estimatedDurationMinutes, category, isActive } = req.body;
 
     await service.update({
       name: name !== undefined ? name : service.name,
@@ -80,6 +81,7 @@ export const updateService = async (req, res) => {
       depth: depth !== undefined ? depth : service.depth,
       defaultServiceCharge: defaultServiceCharge !== undefined ? defaultServiceCharge : service.defaultServiceCharge,
       estimatedDurationMinutes: estimatedDurationMinutes !== undefined ? estimatedDurationMinutes : service.estimatedDurationMinutes,
+      category: category !== undefined ? category : service.category,
       isActive: isActive !== undefined ? isActive : service.isActive,
     });
 

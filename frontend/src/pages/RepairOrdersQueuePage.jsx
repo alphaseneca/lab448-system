@@ -38,13 +38,19 @@ export default function RepairOrdersQueuePage() {
           <h1 className="text-3xl font-extrabold mb-1">Repair Order Queue</h1>
           <p className="text-secondary tracking-wide">Operational queue for pending and in-progress repair orders.</p>
         </div>
-        <button className="btn btn-ghost" onClick={fetchQueue}>Refresh</button>
+        <button className="btn btn-ghost" onClick={fetchQueue} title="Refresh">
+          {loading ? (
+            <span className="loading-spinner spinner-sm"></span>
+          ) : (
+            <span className="material-symbols-rounded icon-sm">refresh</span>
+          )}
+        </button>
       </header>
 
       <div className="card p-0 overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-surface/40 border-b border-panel">
+            <tr className="bg-surface border-b border-panel">
               <th className="px-4 py-3 text-xs uppercase text-muted">Order</th>
               <th className="px-4 py-3 text-xs uppercase text-muted">Customer</th>
               <th className="px-4 py-3 text-xs uppercase text-muted">Device</th>

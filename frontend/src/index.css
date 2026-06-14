@@ -375,6 +375,12 @@ tbody tr:hover {
 
 @media (max-width: 768px) {
   .grid-cols-4, .grid-cols-3, .grid-cols-2 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    gap: 0.35rem;
+  }
 }
 
 /* Material Icons custom sizing */
@@ -398,6 +404,15 @@ tbody tr:hover {
   animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Slim scrollbar */
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;
@@ -412,3 +427,35 @@ tbody tr:hover {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
+
+/* CSS Spinner to replace font-based loading icons and avoid text leakage */
+.loading-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-spin 0.75s linear infinite;
+  vertical-align: middle;
+}
+.loading-spinner.spinner-sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+.loading-spinner.spinner-md {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+.loading-spinner.spinner-lg {
+  width: 36px;
+  height: 36px;
+  border-width: 3px;
+}
+
+@keyframes spinner-spin {
+  to { transform: rotate(360deg); }
+}
+

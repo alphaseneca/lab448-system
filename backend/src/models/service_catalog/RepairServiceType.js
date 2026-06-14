@@ -19,6 +19,10 @@ export default (sequelize) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      category: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
       depth: {
         type: DataTypes.SMALLINT,
         allowNull: true,

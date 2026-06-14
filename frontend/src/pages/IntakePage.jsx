@@ -6,7 +6,7 @@ import { APP_ROUTES } from '../constants/routes';
 import { INTAKE_SOURCES, INTAKE_SOURCE_LABELS } from '../constants/constants';
 import { validatePhone, validateEmail } from '../utils/validation';
 import deviceBrands from '../data/deviceBrands.json';
-import QrLabelPrint, { printQrLabel } from '../components/QrLabelPrint';
+import QrLabelPrint, { printQrLabel, getQrLabelConfig } from '../utils/printService';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const SEARCH_MIN_LEN = 2;
@@ -63,12 +63,14 @@ export default function IntakePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [createdRepair, setCreatedRepair] = useState(null);
+  const [labelConfig, setLabelConfig] = useState({});
 
-  // ─── Load service catalog ───────────────────────────────────────────────
+  // ─── Load service catalog & label config ──────────────────────────────────
   useEffect(() => {
     api.get('/service-catalog')
       .then(res => setServiceTypes((res.data || []).filter(s => s.isActive !== false)))
       .catch(() => setServiceTypes([]));
+    getQrLabelConfig().then(setLabelConfig);
   }, []);
 
   const selectedService = serviceTypes.find(s => s.id === form.serviceTypeId);
@@ -235,7 +237,7 @@ export default function IntakePage() {
 
   // ─── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="animate-fade-in flex flex-col gap-6 w-full max-w-4xl mx-auto pb-12">
+    <div className="animate-fade-in flex flex-col gap-6 w-full pb-12">
       <header>
         <h1 className="text-3xl font-extrabold mb-1">New Repair Intake</h1>
         <p className="text-secondary">Register a device for service and assign it to a customer.</p>
@@ -251,8 +253,8 @@ export default function IntakePage() {
                 <h2 className="text-lg font-bold">Intake Created Successfully</h2>
               </div>
               <p className="text-secondary text-sm">
-                Ticket <span className="font-mono font-bold text-primary">{createdRepair.ticketNumber}</span> for{' '}
-                <span className="font-semibold text-primary">{createdRepair.customer?.name}</span>
+                Ticket <span className="font-mono font-bold text-text-primary">{createdRepair.ticketNumber}</span> for{' '}
+                <span className="font-semibold text-text-primary">{createdRepair.customer?.name}</span>
               </p>
             </div>
             <span className="badge badge-success">{createdRepair.status}</span>
@@ -264,7 +266,7 @@ export default function IntakePage() {
                 <QRCodeSVG value={createdRepair.ticketNumber} size={140} level="M" />
               </div>
               <span className="font-mono text-xs text-muted">{createdRepair.ticketNumber}</span>
-              <button className="btn btn-secondary text-xs" onClick={() => printQrLabel(qrPrintRef, {})}>
+              <button className="btn btn-secondary text-xs" onClick={() => printQrLabel(qrPrintRef, labelConfig)}>
                 <span className="material-symbols-rounded icon-sm">print</span> Print Label
               </button>
             </div>
@@ -275,6 +277,7 @@ export default function IntakePage() {
                  ref={qrPrintRef} 
                  customerName={customer?.fullName || ''} 
                  qrToken={createdRepair.ticketNumber} 
+                 labelConfig={labelConfig}
                />
             </div>
             <div className="flex flex-col gap-2 text-sm flex-1">
@@ -352,7 +355,7 @@ export default function IntakePage() {
                       onClick={() => selectCustomer(c)}
                       onKeyDown={ev => ev.key === 'Enter' && selectCustomer(c)}
                     >
-                      <div className="font-semibold text-sm text-primary">{c.name}</div>
+                      <div className="font-semibold text-sm text-text-primary">{c.name}</div>
                       <div className="text-xs text-muted">{[c.phonePrimary, c.phoneSecondary, c.email].filter(Boolean).join(' · ') || '—'}</div>
                     </li>
                   ))}
@@ -502,7 +505,7 @@ export default function IntakePage() {
                   }}
                   onClick={() => setIntakeSourceOpen(prev => !prev)}
                 >
-                  <span className={form.intakeSource ? 'text-primary' : 'text-muted'}>
+                  <span className={form.intakeSource ? 'text-text-primary' : 'text-muted'}>
                     {INTAKE_SOURCE_LABELS[form.intakeSource] || form.intakeSource || 'Select source'}
                   </span>
                   <span className="material-symbols-rounded text-muted" style={{ fontSize: '20px' }}>expand_more</span>
@@ -531,7 +534,7 @@ export default function IntakePage() {
                   }}
                   onClick={() => setServiceCategoryOpen(prev => !prev)}
                 >
-                  <span className={form.serviceTypeId ? 'text-primary' : 'text-muted'}>
+                  <span className={form.serviceTypeId ? 'text-text-primary' : 'text-muted'}>
                     {form.serviceTypeId
                       ? (() => {
                           const s = serviceTypes.find(t => t.id === form.serviceTypeId);
@@ -602,11 +605,11 @@ export default function IntakePage() {
           </section>
 
           {/* ── Actions ───────────────────────────────────────────── */}
-          <div className="flex items-center justify-end gap-4 pt-2">
-            <button type="button" className="btn btn-ghost" onClick={() => navigate(APP_ROUTES.REPAIR_ORDERS_LIST)}>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-2">
+            <button type="button" className="btn btn-ghost order-2 sm:order-1" onClick={() => navigate(APP_ROUTES.REPAIR_ORDERS_LIST)}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary px-8" disabled={isSubmitting}>
+            <button type="submit" className="btn btn-primary px-8 order-1 sm:order-2" disabled={isSubmitting}>
               {isSubmitting ? (
                 <><span className="material-symbols-rounded icon-sm animate-spin">progress_activity</span> Creating...</>
               ) : (

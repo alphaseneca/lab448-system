@@ -40,7 +40,7 @@ function NavSection({ label }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   const { user, logout, hasPermission, hasRole, isAdmin } = useAuth();
 
   const handleLogout = () => {
@@ -51,22 +51,28 @@ export default function Sidebar() {
   const admin = isAdmin?.() ?? (user?.roleCode === ROLES.ADMIN);
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-64 bg-secondary/80 backdrop-blur-3xl border-r border-panel flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)]">
+    <aside className={`fixed left-0 top-0 bottom-0 w-64 bg-secondary/80 backdrop-blur-3xl border-r border-panel flex flex-col z-50 shadow-[4px_0_24px_rgba(0,0,0,0.5)] transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
 
       {/* Brand */}
-      <div className="p-6 pb-5 border-b border-panel flex items-center gap-4">
-        <div className="bg-white rounded-md p-1 shadow-glow flex items-center justify-center">
-          <img src="/lab448_icon.png" alt="Lab448" className="w-8 h-8 object-contain" />
+      <div className="p-6 pb-5 border-b border-panel flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="bg-white rounded-md p-1 shadow-glow flex items-center justify-center">
+            <img src="/lab448_icon.png" alt="Lab448" className="w-8 h-8 object-contain" />
+          </div>
+          <div>
+            <h1 className="text-lg font-extrabold tracking-tight" style={{
+              background: 'linear-gradient(135deg, var(--accent-primary), var(--text-primary))',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>
+              Lab448
+            </h1>
+            <p className="text-xs text-muted font-medium uppercase tracking-wider">Repair System</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-extrabold tracking-tight" style={{
-            background: 'linear-gradient(135deg, var(--accent-primary), var(--text-primary))',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>
-            Lab448
-          </h1>
-          <p className="text-xs text-muted font-medium uppercase tracking-wider">Repair System</p>
-        </div>
+        
+        <button className="lg:hidden btn btn-ghost p-1 rounded-md text-text-primary hover:bg-panel" onClick={onClose}>
+          <span className="material-symbols-rounded">close</span>
+        </button>
       </div>
 
       {/* Navigation */}
@@ -138,7 +144,7 @@ export default function Sidebar() {
             {user?.fullName?.charAt(0)?.toUpperCase()}
           </div>
           <div className="overflow-hidden flex-1">
-            <div className="text-sm font-bold text-primary truncate">{user?.fullName}</div>
+            <div className="text-sm font-bold text-text-primary truncate">{user?.fullName}</div>
             <div className="text-xs truncate flex items-center gap-1">
               {admin ? (
                 <span className="text-accent-primary font-semibold">Full System Access</span>

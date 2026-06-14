@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { APP_ROUTES } from '../constants/routes';
 import { PERMISSIONS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '../constants/constants';
+import { printThermalBill, getNextBillNumber } from '../utils/printService';
 
 /**
  * BillingPage — Full invoice management for a repair order.
@@ -127,7 +128,7 @@ export default function BillingPage() {
   // ── Loading / error states ───────────────────────────────────────────
   if (loading) return (
     <div className="h-full flex flex-col items-center justify-center min-h-[50vh]">
-      <span className="material-symbols-rounded icon-lg animate-spin text-accent-primary mb-4">refresh</span>
+      <span className="loading-spinner spinner-lg text-accent-primary mb-4"></span>
       <p className="text-secondary font-medium">Loading billing data...</p>
     </div>
   );
@@ -144,20 +145,43 @@ export default function BillingPage() {
   );
 
   return (
-    <div className="animate-fade-in flex flex-col gap-6 max-w-5xl mx-auto pb-12">
+    <div className="animate-fade-in flex flex-col gap-6 w-full pb-12">
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold mb-1">{repair?.ticketNumber || `Repair #${id}`}</h1>
           <p className="text-secondary">
-            <span className="font-semibold text-primary">{repair?.customer?.name}</span>
+            <span className="font-semibold text-text-primary">{repair?.customer?.name}</span>
             <span className="mx-2 text-muted">·</span>
             {repair?.device?.brand} {repair?.device?.modelName}
           </p>
         </div>
-        <NavLink to={APP_ROUTES.REPAIR_ORDER_DETAILS(id)} className="btn btn-ghost self-start flex items-center gap-2">
-          <span className="material-symbols-rounded icon-sm">arrow_back</span> Workspace
-        </NavLink>
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          {invoice && (
+            <button
+              onClick={() => {
+                const lines = (invoice.items || invoice.invoiceItems || []).map(item => ({
+                  description: item.description,
+                  rate: Number(item.unitPrice),
+                  amount: Number(item.unitPrice) * Number(item.quantity)
+                }));
+                printThermalBill({
+                  billNumber: invoice.invoiceNumber || getNextBillNumber(),
+                  customerName: repair?.customer?.name,
+                  customerPhone: repair?.customer?.phone || repair?.customer?.phonePrimary,
+                  lines,
+                  total: totalAmount
+                });
+              }}
+              className="btn btn-secondary flex-1 md:flex-none flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-rounded icon-sm">print</span> Print Bill
+            </button>
+          )}
+          <NavLink to={APP_ROUTES.REPAIR_ORDER_DETAILS(id)} className="btn btn-ghost flex-1 md:flex-none flex items-center justify-center gap-2">
+            <span className="material-symbols-rounded icon-sm">arrow_back</span> Workspace
+          </NavLink>
+        </div>
       </header>
 
       {error && (
@@ -184,7 +208,7 @@ export default function BillingPage() {
         <>
           {/* ── Invoice Summary ──────────────────────────────────────── */}
           <section className="card !p-0 overflow-hidden">
-            <div className="p-4 border-b border-panel bg-surface/30 flex items-center justify-between">
+            <div className="p-4 border-b border-panel bg-surface flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-secondary flex items-center gap-2">
                 <span className="material-symbols-rounded icon-sm">receipt</span> Invoice Summary
               </h2>
@@ -215,7 +239,7 @@ export default function BillingPage() {
 
           {/* ── Line Items ───────────────────────────────────────────── */}
           <section className="card !p-0 overflow-hidden">
-            <div className="p-4 border-b border-panel bg-surface/30 flex items-center justify-between">
+            <div className="p-4 border-b border-panel bg-surface flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-secondary flex items-center gap-2">
                 <span className="material-symbols-rounded icon-sm">list_alt</span> Invoice Items
               </h2>
@@ -223,7 +247,7 @@ export default function BillingPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-panel bg-surface/30">
+                  <tr className="border-b border-panel bg-surface">
                     <th className="px-4 py-3 text-left text-xs font-bold text-muted uppercase tracking-wider">Description</th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-muted uppercase tracking-wider">Qty</th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-muted uppercase tracking-wider">Unit Price</th>
@@ -236,7 +260,7 @@ export default function BillingPage() {
                     <tr><td colSpan={5} className="px-4 py-6 text-center text-muted text-sm">No items yet. Add the first item below.</td></tr>
                   ) : (
                     (invoice.items || invoice.invoiceItems || []).map(item => (
-                      <tr key={item.id} className="border-b border-panel last:border-0 hover:bg-surface/50 transition-colors">
+                      <tr key={item.id} className="border-b border-panel last:border-0 hover:bg-surface transition-colors">
                         <td className="px-4 py-3 font-medium">{item.description}</td>
                         <td className="px-4 py-3 text-right text-secondary">{item.quantity}</td>
                         <td className="px-4 py-3 text-right text-secondary">Rs. {Number(item.unitPrice).toFixed(2)}</td>
@@ -276,7 +300,7 @@ export default function BillingPage() {
 
           {/* ── Payments table + record form ──────────────────────────── */}
           <section className="card !p-0 overflow-hidden">
-            <div className="p-4 border-b border-panel bg-surface/30 flex items-center justify-between">
+            <div className="p-4 border-b border-panel bg-surface flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-secondary flex items-center gap-2">
                 <span className="material-symbols-rounded icon-sm">payments</span> Payment Records
               </h2>
@@ -284,7 +308,7 @@ export default function BillingPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-panel bg-surface/30">
+                  <tr className="border-b border-panel bg-surface">
                     <th className="px-4 py-3 text-left text-xs font-bold text-muted uppercase tracking-wider">Date</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-muted uppercase tracking-wider">Method</th>
                     <th className="px-4 py-3 text-right text-xs font-bold text-muted uppercase tracking-wider">Amount</th>
@@ -295,7 +319,7 @@ export default function BillingPage() {
                     <tr><td colSpan={3} className="px-4 py-6 text-center text-muted text-sm">No payments recorded yet.</td></tr>
                   ) : (
                     (invoice.payments || []).map(p => (
-                      <tr key={p.id} className="border-b border-panel last:border-0 hover:bg-surface/50 transition-colors">
+                      <tr key={p.id} className="border-b border-panel last:border-0 hover:bg-surface transition-colors">
                         <td className="px-4 py-3 text-secondary">{p.receivedAt ? new Date(p.receivedAt).toLocaleString() : '—'}</td>
                         <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[p.method] || p.method}</td>
                         <td className="px-4 py-3 text-right font-semibold" style={{ color: 'var(--accent-secondary)' }}>Rs. {Number(p.amount).toFixed(2)}</td>

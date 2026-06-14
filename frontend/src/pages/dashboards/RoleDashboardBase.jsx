@@ -5,7 +5,9 @@ import { api } from '../../services/api';
 function StatCard({ label, value, icon }) {
   return (
     <div className="card card-hoverable !p-5">
-      <div className="text-2xl mb-3">{icon}</div>
+      <div className="text-2xl mb-3 text-accent-primary">
+        <span className="material-symbols-rounded">{icon}</span>
+      </div>
       <div className="text-xs font-bold text-secondary uppercase tracking-wider">{label}</div>
       <div className="text-3xl font-extrabold mt-1">{value}</div>
     </div>
@@ -46,7 +48,7 @@ export default function RoleDashboardBase({
 
       {loading ? (
         <div className="h-44 flex items-center justify-center">
-          <span className="material-symbols-rounded icon-lg animate-spin text-accent-primary">refresh</span>
+          <span className="loading-spinner spinner-lg text-accent-primary"></span>
         </div>
       ) : (
         <>
@@ -61,7 +63,7 @@ export default function RoleDashboardBase({
               <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
               <div className="flex flex-wrap gap-3">
                 {actions.map((action) => (
-                  <NavLink key={action.to} to={action.to} className="btn btn-ghost">
+                  <NavLink key={action.to} to={action.to} className="btn btn-secondary text-sm flex-1 sm:flex-none text-center min-w-[140px]">
                     {action.label}
                   </NavLink>
                 ))}

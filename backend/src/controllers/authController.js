@@ -410,11 +410,59 @@ export const updateRole = async (req, res) => {
 export const listPermissions = async (req, res) => {
   try {
     const permissions = await models.Permission.findAll({ 
-      order: [["module", "ASC"], ["code", "ASC"]] 
+      order: [["group", "ASC"], ["code", "ASC"]] 
     });
     res.json(permissions);
   } catch (err) {
     console.error("List permissions error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const deleteRole = async (req, res) => {
+  const t = await models.sequelize.transaction();
+  try {
+    const role = await models.Role.findByPk(req.params.id, { transaction: t });
+    if (!role) {
+      await t.rollback();
+      return res.status(404).json({ message: "Role not found" });
+    }
+
+    const systemCodes = ["ADMIN", "TECHNICIAN", "FRONT_DESK", "LOGISTICS", "FINANCE", "MANAGER"];
+    if (systemCodes.includes(role.code) || (role.id && role.id.startsWith("role_"))) {
+      await t.rollback();
+      return res.status(400).json({ message: "Default system roles cannot be deleted" });
+    }
+
+    // Check if any active staff member is assigned to this role
+    const assignedStaffCount = await models.StaffMember.count({
+      where: { roleId: role.id, deletedAt: null },
+      transaction: t,
+    });
+    if (assignedStaffCount > 0) {
+      await t.rollback();
+      return res.status(400).json({ message: "Cannot delete role because staff members are assigned to it" });
+    }
+
+    // Delete role association and the role itself
+    await role.setPermissions([], { transaction: t });
+    await role.destroy({ transaction: t });
+
+    await logAudit({
+      userId: req.user.id,
+      actorType: "STAFF",
+      eventName: "ROLE_DELETED",
+      entityType: "Role",
+      entityId: role.id,
+      beforeSnapshot: { name: role.name, code: role.code },
+      ipAddress: req.ip,
+    }, t);
+
+    await t.commit();
+    res.json({ message: "Role deleted successfully" });
+  } catch (err) {
+    await t.rollback();
+    console.error("Delete role error:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };

@@ -6,19 +6,18 @@ import { APP_ROUTES } from './constants/routes';
 import { PERMISSIONS, ROLES } from './constants/constants';
 
 // Pages
-import Login from './pages/Login';
+import LoginPage from './pages/LoginPage';
 import DashboardRouter from './pages/DashboardRouter';
-import RepairsList from './pages/RepairsList';
+import RepairsPage from './pages/RepairsPage';
 import RepairOrdersQueuePage from './pages/RepairOrdersQueuePage';
 import IntakePage from './pages/IntakePage';
-import RepairWorkspace from './pages/RepairWorkspace';
+import RepairWorkspacePage from './pages/RepairWorkspacePage';
 import BillingPage from './pages/BillingPage';
 import QrScanPage from './pages/QrScanPage';
 import CustomersPage from './pages/CustomersPage';
-import NewCustomerPage from './pages/NewCustomerPage';
 import CustomerDetailPage from './pages/CustomerDetailPage';
 import InventoryPage from './pages/InventoryPage';
-import UsersPage from './pages/UsersPage';
+import StaffRolesPage from './pages/StaffRolesPage';
 
 // Dashboards
 import AdminDashboard from './pages/dashboards/AdminDashboard';
@@ -41,7 +40,7 @@ const ProtectedRoute = ({ children, requiredPermission, requiredRole }) => {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-primary">
-      <span className="material-symbols-rounded icon-lg animate-spin text-accent-primary">refresh</span>
+      <span className="loading-spinner spinner-lg text-accent-primary"></span>
     </div>
   );
 
@@ -68,7 +67,7 @@ function AppRoutes() {
       {/* Auth */}
       <Route
         path={APP_ROUTES.LOGIN}
-        element={user ? <Navigate to={APP_ROUTES.DASHBOARD} replace /> : <Login />}
+        element={user ? <Navigate to={APP_ROUTES.DASHBOARD} replace /> : <LoginPage />}
       />
 
       {/* Dashboards */}
@@ -83,24 +82,23 @@ function AppRoutes() {
 
       {/* Repair Orders  (/api/repair-orders) */}
       <Route path={APP_ROUTES.NEW_REPAIR_ORDER} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_CREATE}><IntakePage /></ProtectedRoute>} />
-      <Route path={APP_ROUTES.REPAIR_ORDERS_LIST} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_VIEW}><RepairsList /></ProtectedRoute>} />
+      <Route path={APP_ROUTES.REPAIR_ORDERS_LIST} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_VIEW}><RepairsPage /></ProtectedRoute>} />
       <Route path={APP_ROUTES.REPAIR_ORDERS_QUEUE} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_VIEW}><RepairOrdersQueuePage /></ProtectedRoute>} />
-      <Route path={APP_ROUTES.REPAIR_ORDER_DETAILS()} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_VIEW}><RepairWorkspace /></ProtectedRoute>} />
+      <Route path={APP_ROUTES.REPAIR_ORDER_DETAILS()} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_VIEW}><RepairWorkspacePage /></ProtectedRoute>} />
       <Route path={APP_ROUTES.REPAIR_ORDER_BILLING()} element={<ProtectedRoute requiredPermission={PERMISSIONS.MANAGE_BILLING}><BillingPage /></ProtectedRoute>} />
 
       {/* QR Scanner */}
       <Route path={APP_ROUTES.QR_SCAN} element={<ProtectedRoute requiredPermission={PERMISSIONS.REPAIR_VIEW}><QrScanPage /></ProtectedRoute>} />
 
-      {/* Customer Directory (/api/customers) */}
       <Route path={APP_ROUTES.CUSTOMERS} element={<ProtectedRoute requiredPermission={PERMISSIONS.CUSTOMER_VIEW}><CustomersPage /></ProtectedRoute>} />
-      <Route path={APP_ROUTES.NEW_CUSTOMER} element={<ProtectedRoute requiredPermission={PERMISSIONS.CUSTOMER_EDIT}><NewCustomerPage /></ProtectedRoute>} />
+      <Route path={APP_ROUTES.NEW_CUSTOMER} element={<Navigate to={APP_ROUTES.CUSTOMERS} replace />} />
       <Route path={APP_ROUTES.CUSTOMER_DETAILS()} element={<ProtectedRoute requiredPermission={PERMISSIONS.CUSTOMER_VIEW}><CustomerDetailPage /></ProtectedRoute>} />
 
       {/* Inventory (/api/inventory) */}
       <Route path={APP_ROUTES.INVENTORY} element={<ProtectedRoute requiredPermission={PERMISSIONS.INVENTORY_MANAGE}><InventoryPage /></ProtectedRoute>} />
 
       {/* Staff & Roles (/api/auth/staff) */}
-      <Route path={APP_ROUTES.USERS} element={<ProtectedRoute requiredPermission={PERMISSIONS.MANAGE_STAFF}><UsersPage /></ProtectedRoute>} />
+      <Route path={APP_ROUTES.USERS} element={<ProtectedRoute requiredPermission={PERMISSIONS.MANAGE_STAFF}><StaffRolesPage /></ProtectedRoute>} />
 
       {/* Fallbacks */}
       <Route path="/" element={<Navigate to={APP_ROUTES.DASHBOARD} replace />} />

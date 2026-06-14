@@ -261,7 +261,7 @@ export const financeDashboard = async (req, res) => {
         include: [
           {
             model: models.Invoice, as: "invoice",
-            attributes: ["id", "invoiceNumber", "totalAmount", "totalPaidAmount", "status"],
+            attributes: ["id", "invoiceNumber", "totalAmount", "totalPaidAmount", "status", "repairOrderId"],
             include: [
               { model: models.Customer, as: "customer", attributes: ["id", "name"] },
             ],

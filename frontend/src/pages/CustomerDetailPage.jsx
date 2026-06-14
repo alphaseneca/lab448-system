@@ -2,18 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { APP_ROUTES } from '../constants/routes';
-import DarkSelect from '../components/DarkSelect';
-import { PAYMENT_METHODS } from '../constants/constants';
+import { PAYMENT_METHODS, PERMISSIONS } from '../constants/constants';
+import FormField from '../components/FormField';
+import { validatePhone, validateEmail } from '../utils/validation';
+import { useAuth } from '../hooks/useAuth';
 
 export default function CustomerDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
   const [data, setData] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', phonePrimary: '', phoneSecondary: '', email: '', addressLine: '', latitude: '', longitude: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // Lump Sum Payment Form
   const [payment, setPayment] = useState({ amount: '', paymentMethod: 'CASH', referenceNumber: '' });
@@ -73,7 +77,7 @@ export default function CustomerDetailPage() {
 
   if (loading) return (
     <div className="h-full flex items-center justify-center min-h-[50vh]">
-      <span className="material-symbols-rounded icon-lg animate-spin text-accent-primary">refresh</span>
+      <span className="loading-spinner spinner-lg text-accent-primary"></span>
     </div>
   );
 
@@ -83,6 +87,20 @@ export default function CustomerDetailPage() {
   const balanceDue = summary.totalDue;
 
   const saveProfile = async () => {
+    const errors = {};
+    if (!form.name.trim()) errors.name = 'Full name is required.';
+    const p1 = validatePhone(form.phonePrimary);
+    if (!p1.valid) errors.phonePrimary = p1.message;
+    if (form.phoneSecondary) {
+      const p2 = validatePhone(form.phoneSecondary);
+      if (!p2.valid) errors.phoneSecondary = p2.message;
+    }
+    const em = validateEmail(form.email);
+    if (!em.valid) errors.email = em.message;
+
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
+
     setSaving(true);
     try {
       const res = await api.put(`/customers/${id}`, {
@@ -119,7 +137,7 @@ export default function CustomerDetailPage() {
   };
 
   return (
-    <div className="animate-fade-in flex flex-col gap-6 max-w-6xl mx-auto pb-12">
+    <div className="animate-fade-in flex flex-col gap-6 w-full pb-12">
       
       {/* Header Profile */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-panel pb-6 pt-2">
@@ -128,16 +146,18 @@ export default function CustomerDetailPage() {
               {customer.name.charAt(0)}
            </div>
            <div>
-             <h1 className="text-3xl font-extrabold text-primary mb-1">{profile?.name || customer.name}</h1>
+             <h1 className="text-3xl font-extrabold text-text-primary mb-1">{profile?.name || customer.name}</h1>
             <p className="text-secondary font-medium tracking-wide">Customer profile and account ledger</p>
            </div>
         </div>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={() => setEditing((v) => !v)}>
-            {editing ? 'Cancel Edit' : 'Edit Customer'}
-          </button>
-          <button className="btn btn-secondary" onClick={() => navigate('/customers')}>
-            <span className="material-symbols-rounded icon-sm">arrow_back</span> Back to Directory
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          {hasPermission(PERMISSIONS.CUSTOMER_EDIT) && (
+            <button className="btn btn-ghost flex-1 md:flex-none" onClick={() => setEditing((v) => !v)}>
+              {editing ? 'Cancel' : 'Edit Profile'}
+            </button>
+          )}
+          <button className="btn btn-secondary flex-1 md:flex-none" onClick={() => navigate('/customers')}>
+            <span className="material-symbols-rounded icon-sm">arrow_back</span> Back
           </button>
         </div>
       </header>
@@ -158,17 +178,104 @@ export default function CustomerDetailPage() {
                 <div><span className="text-muted">Longitude:</span> {profile?.addresses?.[0]?.longitude || '—'}</div>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
-                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name" />
-                <input value={form.phonePrimary} onChange={(e) => setForm((f) => ({ ...f, phonePrimary: e.target.value }))} placeholder="Primary phone" />
-                <input value={form.phoneSecondary} onChange={(e) => setForm((f) => ({ ...f, phoneSecondary: e.target.value }))} placeholder="Secondary phone" />
-                <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email" />
-                <textarea rows={2} value={form.addressLine} onChange={(e) => setForm((f) => ({ ...f, addressLine: e.target.value }))} placeholder="Address" />
-                <input type="number" step="0.00000001" value={form.latitude} onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))} placeholder="Latitude" />
-                <input type="number" step="0.00000001" value={form.longitude} onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))} placeholder="Longitude" />
-                <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
+              <div className="flex flex-col gap-4">
+                <FormField label="Full Name" required error={fieldErrors.name}>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, name: e.target.value }));
+                      setFieldErrors((errs) => ({ ...errs, name: undefined }));
+                    }}
+                    placeholder="Ram Kumar Shrestha"
+                    className="w-full"
+                  />
+                </FormField>
+
+                <FormField label="Primary Phone" required error={fieldErrors.phonePrimary}>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={form.phonePrimary}
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, phonePrimary: e.target.value }));
+                      setFieldErrors((errs) => ({ ...errs, phonePrimary: undefined }));
+                    }}
+                    placeholder="98XXXXXXXX"
+                    className="w-full"
+                  />
+                </FormField>
+
+                <FormField label="Secondary Phone" error={fieldErrors.phoneSecondary}>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={form.phoneSecondary}
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, phoneSecondary: e.target.value }));
+                      setFieldErrors((errs) => ({ ...errs, phoneSecondary: undefined }));
+                    }}
+                    placeholder="Optional"
+                    className="w-full"
+                  />
+                </FormField>
+
+                <FormField label="Email Address" error={fieldErrors.email}>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, email: e.target.value }));
+                      setFieldErrors((errs) => ({ ...errs, email: undefined }));
+                    }}
+                    placeholder="email@example.com"
+                    className="w-full"
+                  />
+                </FormField>
+
+                <FormField label="Address Line">
+                  <textarea
+                    rows={2}
+                    value={form.addressLine}
+                    onChange={(e) => setForm((f) => ({ ...f, addressLine: e.target.value }))}
+                    placeholder="e.g. New Road, Kathmandu"
+                    className="w-full"
+                  />
+                </FormField>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField label="Latitude">
+                    <input
+                      type="number"
+                      step="0.00000001"
+                      value={form.latitude}
+                      onChange={(e) => setForm((f) => ({ ...f, latitude: e.target.value }))}
+                      placeholder="e.g. 27.7007"
+                      className="w-full"
+                    />
+                  </FormField>
+                  <FormField label="Longitude">
+                    <input
+                      type="number"
+                      step="0.00000001"
+                      value={form.longitude}
+                      onChange={(e) => setForm((f) => ({ ...f, longitude: e.target.value }))}
+                      placeholder="e.g. 85.3123"
+                      className="w-full"
+                    />
+                  </FormField>
+                </div>
+
+                <div className="flex gap-2 mt-2">
+                  <button className="btn btn-primary flex-1" onClick={saveProfile} disabled={saving}>
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setEditing(false); setFieldErrors({}); }} disabled={saving}>
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -197,7 +304,7 @@ export default function CustomerDetailPage() {
             </div>
           </div>
 
-          {balanceDue > 0 && (
+          {balanceDue > 0 && hasPermission(PERMISSIONS.MANAGE_BILLING) && (
             <form onSubmit={handleLumpSumPayment} className="card p-5 border border-dashed border-warning/50">
               <h3 className="text-sm font-bold uppercase tracking-wider text-warning mb-4 flex items-center gap-2">
                 <span className="material-symbols-rounded icon-sm">payments</span> Distribute Payment
@@ -213,11 +320,16 @@ export default function CustomerDetailPage() {
                 </div>
                 <div>
                   <label className="text-xs font-bold text-secondary mb-1 block">Method</label>
-                  <DarkSelect
+                  <select
                     value={payment.paymentMethod}
-                    onChange={(method) => setPayment({ ...payment, paymentMethod: method })}
-                    options={paymentMethodOptions}
-                  />
+                    onChange={(e) => setPayment({ ...payment, paymentMethod: e.target.value })}
+                  >
+                    {paymentMethodOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <button type="submit" className="btn mt-2 bg-warning-bg text-warning border-warning/50 hover:bg-warning hover:text-white" disabled={processing}>
                   {processing ? 'Processing...' : 'Apply Payment'}
@@ -231,7 +343,7 @@ export default function CustomerDetailPage() {
         {/* Right Column: Devices and Order History */}
         <div className="lg:col-span-2 flex flex-col gap-6">
           <div className="card p-0 overflow-hidden">
-             <div className="p-4 bg-surface/30 border-b border-panel flex items-center justify-between">
+              <div className="p-4 bg-surface border-b border-panel flex items-center justify-between">
                 <h2 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-secondary">
                   <span className="material-symbols-rounded icon-sm">history</span> Repair & Billing History
                 </h2>

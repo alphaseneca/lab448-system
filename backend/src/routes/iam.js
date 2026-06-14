@@ -23,6 +23,7 @@ router.delete("/staff/:id", checkPermission(PERMISSIONS.MANAGE_STAFF), authContr
 router.get("/roles", checkPermission(PERMISSIONS.MANAGE_STAFF), authController.listRoles);
 router.post("/roles", checkPermission(PERMISSIONS.MANAGE_STAFF), authController.createRole);
 router.put("/roles/:id", checkPermission(PERMISSIONS.MANAGE_STAFF), authController.updateRole);
+router.delete("/roles/:id", checkPermission(PERMISSIONS.MANAGE_STAFF), authController.deleteRole);
 
 router.get("/permissions", checkPermission(PERMISSIONS.MANAGE_STAFF), authController.listPermissions);
 

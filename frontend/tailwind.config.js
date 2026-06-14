@@ -7,8 +7,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        'bg-primary': '#050b14',
-        'bg-secondary': '#0a1526',
+        'primary': '#050b14',
+        'secondary': '#0a1526',
+        'surface': 'rgba(255, 255, 255, 0.04)',
+        'surface-hover': 'rgba(255, 255, 255, 0.08)',
         'panel': 'rgba(255, 255, 255, 0.06)',
         'accent-primary': '#00AEEF',
         'accent-secondary': '#0088CC',
@@ -19,6 +21,11 @@ export default {
         'success': '#10b981',
         'warning': '#f59e0b',
         'danger': '#ef4444',
+      },
+      textColor: {
+        'primary': '#f8fafc',
+        'secondary': '#94a3b8',
+        'muted': '#64748b',
       }
     },
   },
